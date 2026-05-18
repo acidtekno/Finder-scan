@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FingerTrack</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Oxanium:wght@600;800&display=swap');
+  :root{--c:#00ffee;--m:#ff00aa;--o:#ff6600;--bg:#050810;--pan:rgba(0,18,36,.9);--brd:rgba(0,255,238,.14)}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--c);font-family:'Share Tech Mono',monospace;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,238,.012) 2px,rgba(0,255,238,.012) 4px);pointer-events:none;z-index:100}
+  header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--brd);background:var(--pan);flex-shrink:0;z-index:10}
+  .logo{font-family:'Oxanium',monospace;font-weight:800;font-size:1rem;letter-spacing:.1em}
+  .logo span{color:var(--m)}
+  .sr{display:flex;gap:10px;align-items:center;font-size:.6rem}
+  .dot{width:8px;height:8px;border-radius:50%;background:#2a2a2a;transition:background .3s,box-shadow .3s;flex-shrink:0}
+  .dot.ok{background:#00ff88;box-shadow:0 0 8px #00ff88}
+  .dot.warn{background:var(--o);box-shadow:0 0 8px var(--o)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .pulsing{animation:pulse 1s infinite}
+  .wrap{flex:1;position:relative;overflow:hidden}
+  video{position:absolute;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;filter:brightness(.3) saturate(.5)}
+  canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+  .ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:rgba(0,255,238,.4);font-size:.75rem;letter-spacing:.1em;z-index:2;background:var(--bg);text-align:center;padding:20px}
+  .ph svg{width:56px;height:56px;opacity:.25}
+  .fps{position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:.6rem;color:rgba(0,255,238,.5);z-index:3;letter-spacing:.1em}
+  .bar{position:absolute;bottom:0;left:0;height:2px;background:var(--c);width:0%;transition:width .4s;box-shadow:0 0 8px var(--c);z-index:4}
+  .corner{position:absolute;width:22px;height:22px;opacity:.35;z-index:3}
+  .tl{top:8px;left:8px;border-top:2px solid var(--c);border-left:2px solid var(--c)}
+  .tr{top:8px;right:8px;border-top:2px solid var(--c);border-right:2px solid var(--c)}
+  .bl{bottom:8px;left:8px;border-bottom:2px solid var(--c);border-left:2px solid var(--c)}
+  .br{bottom:8px;right:8px;border-bottom:2px solid var(--c);border-right:2px solid var(--c)}
+  .panel{background:var(--pan);border-top:1px solid var(--brd);padding:10px 14px;flex-shrink:0;z-index:10}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .fg{display:flex;flex-direction:column;gap:4px}
+  label{font-size:.55rem;letter-spacing:.12em;color:rgba(0,255,238,.55);text-transform:uppercase}
+  input{background:rgba(0,255,238,.05);border:1px solid var(--brd);color:var(--c);font-family:'Share Tech Mono',monospace;font-size:.75rem;padding:6px 10px;border-radius:2px;width:100%;outline:none}
+  input:focus{border-color:var(--c)}
+  .btns{display:flex;gap:8px;margin-top:10px}
+  button{font-family:'Oxanium',monospace;font-weight:600;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;padding:9px 0;border:none;border-radius:2px;cursor:pointer;flex:1;transition:all .15s;-webkit-tap-highlight-color:transparent}
+  #bCam{background:var(--c);color:var(--bg)}
+  #bCam.on{background:var(--m);color:#fff}
+  #bWs{background:transparent;border:1px solid var(--c);color:var(--c)}
+  #bWs.on{border-color:#00ff88;color:#00ff88}
+  .tick{margin-top:8px;font-size:.6rem;color:rgba(0,255,238,.45);height:16px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">FINGER<span>TRACK</span></div>
+  <div class="sr">
+    <div class="dot" id="dCam"></div><span>CAM</span>
+    <div class="dot" id="dML"></div><span>ML</span>
+    <div class="dot" id="dWS"></div><span>TD</span>
+  </div>
+</header>
+
+<div class="wrap" id="wrap">
+  <video id="vid" autoplay playsinline webkit-playsinline muted></video>
+  <canvas id="cvs"></canvas>
+  <div class="ph" id="ph">
+    <svg viewBox="0 0 64 64" fill="none"><rect x="8" y="16" width="48" height="36" rx="4" stroke="currentColor" stroke-width="2"/><circle cx="32" cy="34" r="10" stroke="currentColor" stroke-width="2"/><circle cx="32" cy="34" r="4" fill="currentColor"/></svg>
+    <span id="phMsg">Naciśnij START</span>
+  </div>
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+  <div class="fps" id="fps"></div>
+  <div class="bar" id="bar"></div>
+  <div class="score" id="scoreEl" style="display:none">0</div>
+  <div class="combo" id="comboEl"></div>
+
+  <!-- HP bar -->
+  <div id="hpWrap" style="display:none">
+    <div id="hpBar"><div id="hpFill"></div></div>
+    <div id="hpLabel">HP 100/100</div>
+    <div id="ballCount">0/100 piłek</div>
+    <div id="missCount" style="margin-top:2px;font-size:.6rem;color:var(--m);">Przepuścić: 100</div>
+  </div>
+
+  <!-- Game over overlay -->
+  <div id="goScreen" style="display:none;position:absolute;inset:0;z-index:20;background:rgba(5,8,16,.88);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+    <div style="font-family:Oxanium,monospace;font-weight:800;font-size:2rem;color:#ff00aa;text-shadow:0 0 30px #ff00aa;">GAME OVER</div>
+    <div id="goScore" style="font-family:Oxanium,monospace;font-size:1.3rem;color:#fff;"></div>
+    <div id="goStats" style="font-family:Share Tech Mono,monospace;font-size:.7rem;color:rgba(0,255,238,.7);text-align:center;line-height:1.8;"></div>
+    <button onclick="startGame()" style="font-family:Oxanium,monospace;font-weight:600;font-size:.8rem;letter-spacing:.1em;padding:12px 32px;background:#00ffee;color:#050810;border:none;border-radius:2px;cursor:pointer;margin-top:8px;">▶ ZAGRAJ PONOWNIE</button>
+  </div>
+
+  <!-- Zone overlays (visible in game) -->
+  <div class="zone zone-dmg"  id="zoneDmg"></div>
+  <div class="zone zone-neu"  id="zoneNeu"></div>
+  <div class="zone zone-heal" id="zoneHeal"></div>
+</div>
+
+<div class="panel">
+  <div class="grid">
+    <div class="fg"><label>TouchDesigner IP</label><input id="wHost" value="192.168.1.100"></div>
+    <div class="fg"><label>Port</label><input id="wPort" value="9980"></div>
+  </div>
+  <div class="btns">
+    <button id="bCam" onclick="toggleCam()">▶ START</button>
+    <button id="bGame" onclick="toggleGame()">🎮 GRA</button>
+    <button id="bWs"  onclick="toggleWS()">⬡ TD</button>
+  </div>
+  <div class="tick" id="tick">oczekiwanie...</div>
+</div>
+
+<!-- Full TF.js bundle (includes core + converter + webgl backend) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@2.0.1/dist/hand-pose-detection.min.js"></script>
+
+<script>
+// ── DOM refs ───────────────────────────────────────────────────────
+const vid   = document.getElementById('vid');
+const cvs   = document.getElementById('cvs');
+const ctx   = cvs.getContext('2d');
+const dCam  = document.getElementById('dCam');
+const dML   = document.getElementById('dML');
+const dWS   = document.getElementById('dWS');
+const bCam  = document.getElementById('bCam');
+const bWs   = document.getElementById('bWs');
+const tick  = document.getElementById('tick');
+const fpsEl = document.getElementById('fps');
+const ph    = document.getElementById('ph');
+const phMsg = document.getElementById('phMsg');
+const bar   = document.getElementById('bar');
+const wrap  = document.getElementById('wrap');
+
+// ── State ──────────────────────────────────────────────────────────
+let detector = null, rafId = null, ws = null;
+let offCvs = document.createElement('canvas');
+let offCtx = offCvs.getContext('2d');
+let camOn = false, wsOn = false, busy = false;
+let fCount = 0, fpsVal = 0, fpsT = performance.now();
+
+// ── Game state ────────────────────────────────────────────────────
+let gameOn = false, score = 0, combo = 0, comboTimer = null;
+let hp = 100, maxHp = 100;
+let totalSpawned = 0, totalExploded = 0, totalMissed = 0;
+let wristPositions = []; // [{x,y,hand}] updated each frame
+let balls = [], particles = [], spawnTimer = null;
+let fingerPositions = []; // updated each detection frame
+const scoreEl   = document.getElementById('scoreEl');
+const comboEl   = document.getElementById('comboEl');
+const bGame     = document.getElementById('bGame');
+const hpWrap    = document.getElementById('hpWrap');
+const missCount = document.getElementById('missCount');
+const goScreen  = document.getElementById('goScreen');
+const goScore   = document.getElementById('goScore');
+const goStats   = document.getElementById('goStats');
+const hpFill    = document.getElementById('hpFill');
+const hpLabel   = document.getElementById('hpLabel');
+const ballCount = document.getElementById('ballCount');
+const zoneDmg   = document.getElementById('zoneDmg');
+const zoneNeu   = document.getElementById('zoneNeu');
+const zoneHeal  = document.getElementById('zoneHeal');
+
+const BALL_COLS = ['#ff6600','#00ffee','#ff00aa','#aaff00','#aa00ff','#ffdd00','#ff4444','#44aaff'];
+
+class Ball {
+  constructor(cvs) {
+    this.r   = 18 + Math.random() * 22;
+    this.x   = this.r + Math.random() * (cvs.width - this.r*2);
+    this.y   = -this.r;
+    this.vx  = (Math.random() - 0.5) * 3;
+    this.vy  = 1 + Math.random() * 2;
+    this.grav= 0.15 + Math.random() * 0.55; // varied gravity
+    this.col = BALL_COLS[Math.floor(Math.random()*BALL_COLS.length)];
+    this.bounces = 0;
+    this.flash = 0; // frames of hit flash
+    this.spin = Math.random() * Math.PI * 2;
+    this.spinV= (Math.random() - 0.5) * 0.12;
+    this.trail = [];
+  }
+  update(cvs) {
+    this.trail.push({x:this.x, y:this.y});
+    if (this.trail.length > 8) this.trail.shift();
+    this.vy += this.grav;
+    this.x  += this.vx;
+    this.y  += this.vy;
+    this.spin += this.spinV;
+    if (this.flash > 0) this.flash--;
+    // wall bounce
+    if (this.x - this.r < 0)          { this.x = this.r;            this.vx = Math.abs(this.vx)*0.8; }
+    if (this.x + this.r > cvs.width)  { this.x = cvs.width-this.r;  this.vx = -Math.abs(this.vx)*0.8; }
+  }
+  isOffScreen(cvs) { return this.y - this.r > cvs.height + 50; }
+  draw(ctx) {
+    // Trail
+    this.trail.forEach((p, i) => {
+      const a = (i / this.trail.length) * 0.35;
+      const r = this.r * (i / this.trail.length) * 0.7;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      ctx.fillStyle = this.col + Math.floor(a*255).toString(16).padStart(2,'0');
+      ctx.fill();
+    });
+    // Glow
+    const g = ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2.2);
+    const flashMix = this.flash > 0 ? 'ff' : '55';
+    g.addColorStop(0,   '#ffffff' + (this.flash>0?'cc':'44'));
+    g.addColorStop(0.3, this.col + flashMix);
+    g.addColorStop(1,   this.col + '00');
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r*2.2, 0, Math.PI*2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    // Main sphere
+    const sg = ctx.createRadialGradient(this.x-this.r*.3, this.y-this.r*.3, 0, this.x, this.y, this.r);
+    sg.addColorStop(0, '#ffffff' + (this.flash>0?'ff':'99'));
+    sg.addColorStop(0.5, this.col);
+    sg.addColorStop(1, '#000000aa');
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.fillStyle = sg;
+    ctx.fill();
+    // Gravity indicator (speed dots)
+    const gravStr = Math.min(this.grav / 0.7, 1);
+    ctx.font = `bold ${Math.round(8+gravStr*4)}px monospace`;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.globalAlpha = 0.7;
+    ctx.fillText('g' + this.grav.toFixed(2), this.x, this.y + this.r + 13);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ── Particle (explosion fragment) ────────────────────────────────
+class Particle {
+  constructor(x, y, col) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd   = 2 + Math.random() * 7;
+    this.x   = x;
+    this.y   = y;
+    this.vx  = Math.cos(angle) * spd;
+    this.vy  = Math.sin(angle) * spd - 3;
+    this.r   = 3 + Math.random() * 6;
+    this.col = col;
+    this.life= 1.0;
+    this.decay = 0.03 + Math.random() * 0.04;
+    this.grav = 0.18;
+  }
+  update() {
+    this.vy  += this.grav;
+    this.x   += this.vx;
+    this.y   += this.vy;
+    this.life -= this.decay;
+    this.r   *= 0.97;
+  }
+  draw(ctx) {
+    ctx.globalAlpha = Math.max(0, this.life);
+    const g = ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
+    g.addColorStop(0, '#fff');
+    g.addColorStop(0.4, this.col);
+    g.addColorStop(1, this.col+'00');
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r*2, 0, Math.PI*2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  dead() { return this.life <= 0 || this.r < 0.5; }
+}
+
+function explodeBall(ball) {
+  const count = 18 + Math.floor(ball.r * 0.8);
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(ball.x, ball.y, ball.col));
+  }
+  // Speed+size based scoring: fast+small = high, slow+large = low
+  const speed  = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+  const pts    = Math.max(5, Math.round(speed * 18 + (40 - ball.r) * 1.5));
+  const combo2 = Math.max(1, combo);
+  const total  = pts * combo2;
+  score += total;
+  combo++;
+  if (comboTimer) clearTimeout(comboTimer);
+  comboTimer = setTimeout(() => { combo = 0; comboEl.classList.remove('show'); }, 1500);
+  scoreEl.textContent = score;
+  scoreEl.classList.add('pop');
+  setTimeout(() => scoreEl.classList.remove('pop'), 120);
+  comboEl.textContent = `💥 +${total} (v${speed.toFixed(1)} r${ball.r.toFixed(0)}) ×${combo2}`;
+  comboEl.classList.add('show');
+}
+
+function updateCounters() {
+  ballCount.textContent = `${totalSpawned}/100 piłek`;
+  missCount.textContent = `Przepuścić: ${100 - totalSpawned}`;
+  // End game when all 100 spawned and no balls left
+  if (totalSpawned >= 100 && balls.length === 0 && gameOn) {
+    setTimeout(() => gameOver('Wszystkie piłki!'), 500);
+  }
+}
+
+function updateHpBar() {
+  const pct = Math.max(0, hp / maxHp * 100);
+  hpFill.style.width = pct + '%';
+  if (pct > 60)      hpFill.style.background = 'linear-gradient(90deg,#00ff88,#aaff00)';
+  else if (pct > 30) hpFill.style.background = 'linear-gradient(90deg,#ff9900,#ffdd00)';
+  else               hpFill.style.background = 'linear-gradient(90deg,#ff2244,#ff6600)';
+  hpLabel.textContent = 'HP ' + Math.ceil(hp) + '/' + maxHp;
+  if (hp <= 0 && gameOn) { hp = 0; updateHpBar(); gameOver('Brak HP'); }
+}
+
+function gameOver(reason) {
+  if (!gameOn) return;
+  gameOn = false;
+  if (spawnTimer) { clearInterval(spawnTimer); spawnTimer = null; }
+  balls = []; particles = [];
+  goScreen.style.display = 'none';
+  bGame.textContent = '🎮 GRA';
+  bGame.classList.remove('on');
+  [zoneDmg,zoneNeu,zoneHeal].forEach(z=>z.classList.remove('active'));
+  hpWrap.style.display = 'none';
+  scoreEl.style.display = 'none';
+  comboEl.classList.remove('show');
+
+  goScore.textContent = '★ ' + score + ' PUNKTÓW ★';
+  goStats.innerHTML =
+    `Powód: ${reason||'HP = 0'}<br>` +
+    `Piłek wystrzelono: ${totalSpawned}/100<br>` +
+    `Eksplozji: ${totalExploded}<br>` +
+    `Przepuszczono: ${totalMissed}`;
+  goScreen.style.display = 'flex';
+  tick.textContent = '💀 GAME OVER — ' + score + ' pkt';
+}
+
+function toggleGame() {
+  if (!camOn) { tick.textContent = '❌ Najpierw włącz kamerę!'; return; }
+  gameOn ? stopGame() : startGame();
+}
+
+function startGame() {
+  gameOn = true; score = 0; combo = 0; balls = []; particles = [];
+  hp = 100; totalSpawned = 0; totalExploded = 0; totalMissed = 0;
+  goScreen.style.display = 'none';
+  updateHpBar();
+  bGame.textContent = '⏹ STOP GRY';
+  bGame.classList.add('on');
+  scoreEl.style.display = 'block';
+  hpWrap.style.display = 'flex';
+  scoreEl.textContent = '0';
+  ballCount.textContent = '0/100 piłek';
+  missCount.textContent = 'Przepuścić: 100';
+  [zoneDmg,zoneNeu,zoneHeal].forEach(z=>z.classList.add('active'));
+  spawnTimer = setInterval(spawnBall, 2000);
+  spawnBall(); // immediate first ball
+}
+
+function stopGame() {
+  gameOn = false;
+  if (spawnTimer) { clearInterval(spawnTimer); spawnTimer = null; }
+  balls = []; particles = [];
+  bGame.textContent = '🎮 GRA';
+  bGame.classList.remove('on');
+  scoreEl.style.display = 'none';
+  hpWrap.style.display = 'none';
+  [zoneDmg,zoneNeu,zoneHeal].forEach(z=>z.classList.remove('active'));
+  comboEl.classList.remove('show');
+}
+
+function spawnBall() {
+  if (!gameOn || !camOn) return;
+  if (totalSpawned >= 100) return; // max 100 total this game
+  balls.push(new Ball(cvs));
+  totalSpawned++;
+  updateCounters();
+}
+
+function updateGame() {
+  if (!gameOn) return;
+
+  balls.forEach(ball => {
+    ball.update(cvs);
+
+    // Collision with fingertips
+    fingerPositions.forEach(fp => {
+      const dx = ball.x - fp.x;
+      const dy = ball.y - fp.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const minD = ball.r + fp.r;
+
+      if (dist < minD && dist > 0) {
+        // Push ball away from finger
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const speed = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+        ball.vx = nx * Math.max(speed, 5) * 1.1;
+        ball.vy = ny * Math.max(speed, 5) * 1.1 - 2;
+        // Separate
+        ball.x = fp.x + nx * (minD + 1);
+        ball.y = fp.y + ny * (minD + 1);
+        ball.flash = 8;
+        ball.bounces++;
+        addScore(ball);
+      }
+    });
+  });
+
+  // Top edge — explode if moving upward
+  const toExplode = [];
+  let missedThisFrame = 0;
+  balls = balls.filter(b => {
+    if (b.y - b.r <= 0 && b.vy < 0) { toExplode.push(b); return false; }
+    if (b.isOffScreen(cvs)) { missedThisFrame++; return false; }
+    return true;
+  });
+  toExplode.forEach(b => { explodeBall(b); totalExploded++; });
+  if (missedThisFrame > 0) {
+    totalMissed += missedThisFrame;
+    updateCounters();
+  }
+  if (toExplode.length > 0) updateCounters();
+
+  // Update particles
+  particles.forEach(p => p.update());
+  particles = particles.filter(p => !p.dead());
+
+  // Ball count in ticker
+  if (!gameOn) return;
+
+  // Ball counter
+  const remaining = 100 - balls.length;
+  ballCount.textContent = `${balls.length}/100 piłek | ${remaining} wolnych`;
+
+  // Zone-based HP
+  const h = cvs.height;
+  const dmgZone  = y => y < h * 0.5;
+  const healZone = y => y >= h * 0.75;
+
+  let anyDmg  = false;
+  let healAll = wristPositions.length >= 2 && wristPositions.every(w => healZone(w.y));
+
+  wristPositions.forEach(w => {
+    if (dmgZone(w.y))  anyDmg = true;
+  });
+
+  if (anyDmg) {
+    hp = Math.max(0, hp - 0.3); // ~6HP/s at 20fps
+    updateHpBar();
+  } else if (healAll) {
+    hp = Math.min(maxHp, hp + 0.15); // ~3HP/s
+    updateHpBar();
+  }
+
+  // Highlight heal zone when both hands there
+  zoneHeal.style.borderColor = healAll
+    ? 'rgba(0,255,136,.8)' : 'rgba(0,255,136,.3)';
+  zoneHeal.style.background  = healAll
+    ? 'linear-gradient(0deg,rgba(0,255,136,.3) 0%,transparent 100%)'
+    : 'linear-gradient(0deg,rgba(0,255,136,.15) 0%,transparent 100%)';
+
+  tick.textContent = `🎮 ${score}pkt | HP:${Math.ceil(hp)} | ×${combo}`;
+}
+
+function addScore(ball) {
+  combo++;
+  if (comboTimer) clearTimeout(comboTimer);
+  comboTimer = setTimeout(() => { combo = 0; comboEl.classList.remove('show'); }, 1500);
+
+  const pts = combo >= 3 ? combo * 10 : 10;
+  score += pts;
+  scoreEl.textContent = score;
+  scoreEl.classList.add('pop');
+  setTimeout(() => scoreEl.classList.remove('pop'), 120);
+
+  if (combo >= 2) {
+    comboEl.textContent = `${combo}x COMBO! +${pts}`;
+    comboEl.classList.add('show');
+  }
+}
+
+function drawGame(ctx) {
+  if (!gameOn) return;
+  particles.forEach(p => p.draw(ctx));
+  balls.forEach(b => b.draw(ctx));
+  // Ball count bar at bottom of screen
+  if (balls.length > 0) {
+    const pct = balls.length / 100;
+    ctx.fillStyle = pct > 0.8 ? '#ff4444' : pct > 0.5 ? '#ff6600' : '#00ffee';
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(0, cvs.height - 4, cvs.width * pct, 4);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Keypoint indices for MediaPipe Hands model
+const TIPS  = { thumb:4, index:8, middle:12, ring:16, pinky:20 };
+const TKEYS = Object.keys(TIPS);
+const COLS  = ['#ff6600','#00ffee','#ff00aa','#aaff00','#aa00ff'];
+
+const CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],
+  [0,17]
+];
+
+// ── Canvas resize ──────────────────────────────────────────────────
+function resize() { cvs.width = wrap.offsetWidth; cvs.height = wrap.offsetHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+// ── Model load ────────────────────────────────────────────────────
+async function loadModel() {
+  dML.className = 'dot warn pulsing';
+  setBar(30);
+  tick.textContent = 'Ładuję model TF.js...';
+
+  await tf.setBackend('webgl');
+  await tf.ready();
+
+  const model = handPoseDetection.SupportedModels.MediaPipeHands;
+  const cfg   = {
+    runtime: 'tfjs',
+    modelType: 'lite',
+    maxHands: 2,
+    scoreThreshold: 0.4,
+  };
+
+  detector = await handPoseDetection.createDetector(model, cfg);
+  dML.className = 'dot ok';
+  setBar(60);
+  tick.textContent = 'Model gotowy — włącz kamerę';
+}
+
+// ── Camera ─────────────────────────────────────────────────────────
+async function toggleCam() {
+  if (camOn) { stopCam(); return; }
+  await startCam();
+}
+
+async function startCam() {
+  if (!detector) await loadModel();
+
+  dCam.className = 'dot warn pulsing';
+  setBar(15);
+
+  const tries = [
+    { video: true,                             audio: false },
+    { video: { facingMode: 'environment' },    audio: false },
+    { video: { facingMode: 'user' },           audio: false },
+    { video: { facingMode: { ideal:'environment'}, width:{ideal:1280} }, audio: false },
+  ];
+
+  let stream = null;
+  for (let i = 0; i < tries.length; i++) {
+    try {
+      phMsg.textContent = `Próba ${i+1}/${tries.length}...`;
+      stream = await navigator.mediaDevices.getUserMedia(tries[i]);
+      break;
+    } catch(e) {
+      console.warn('cam try', i, e.name);
+      if (i < tries.length-1) await sleep(300);
+    }
+  }
+
+  if (!stream) {
+    dCam.className = 'dot warn';
+    phMsg.textContent = '❌ Brak dostępu do kamery. Zamknij inne apki.';
+    setBar(0); return;
+  }
+
+  vid.srcObject = stream;
+  await new Promise(res => { vid.onloadedmetadata = res; });
+  try { await vid.play(); } catch(e) {}
+
+  ph.style.display = 'none';
+  dCam.className = 'dot ok';
+  setBar(100); setTimeout(()=>setBar(0), 500);
+
+  const t = stream.getVideoTracks()[0].getSettings();
+  tick.textContent = `Kamera ${t.width||'?'}×${t.height||'?'} | pokaż rękę`;
+
+  camOn = true;
+  bCam.textContent = '■ STOP';
+  bCam.classList.add('on');
+
+  loop();
+}
+
+function stopCam() {
+  camOn = false; busy = false;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (vid.srcObject) { vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject = null; }
+  bCam.textContent = '▶ START';
+  bCam.classList.remove('on');
+  dCam.className = 'dot';
+  if (gameOn) stopGame();
+  ph.style.display = 'flex';
+  phMsg.textContent = 'Naciśnij START';
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  fpsEl.textContent = '';
+}
+
+// ── Detection loop ────────────────────────────────────────────────
+async function loop() {
+  if (!camOn) return;
+  rafId = requestAnimationFrame(loop);
+
+  if (busy || vid.readyState < 2 || vid.paused) return;
+  busy = true;
+
+  try {
+    // Draw current video frame to offscreen canvas (more reliable on mobile)
+    offCvs.width  = vid.videoWidth  || 640;
+    offCvs.height = vid.videoHeight || 480;
+    offCtx.drawImage(vid, 0, 0, offCvs.width, offCvs.height);
+    const hands = await detector.estimateHands(offCvs, { flipHorizontal: false });
+    updateGame();
+    draw(hands);
+    sendTD(hands);
+
+    fCount++;
+    const now = performance.now();
+    if (now - fpsT >= 1000) {
+      fpsVal = Math.round(fCount * 1000 / (now - fpsT));
+      fCount = 0; fpsT = now;
+      fpsEl.textContent = fpsVal + ' FPS';
+    }
+
+    if (hands.length > 0) {
+      const kp = hands[0].keypoints;
+      const ix = kp[8], mi = kp[12];
+      tick.textContent = `[${hands[0].handedness}] IDX(${ix.x.toFixed(0)},${ix.y.toFixed(0)}) MID(${mi.x.toFixed(0)},${mi.y.toFixed(0)})`;
+    } else {
+      tick.textContent = 'brak dłoni w kadrze';
+    }
+  } catch(e) {
+    console.warn('detect:', e);
+  } finally {
+    busy = false; // always release
+  }
+}
+
+// ── Drawing ────────────────────────────────────────────────────────
+function draw(hands) {
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  drawGame(ctx); // balls behind everything
+  fingerPositions = []; // reset each frame
+  wristPositions  = []; // reset each frame
+  if (!hands.length) return;
+
+  // Scale from video coords to canvas coords
+  const vw = vid.videoWidth  || offCvs.width  || cvs.width;
+  const vh = vid.videoHeight || offCvs.height || cvs.height;
+  const sw = cvs.width  / vw;
+  const sh = cvs.height / vh;
+
+  hands.forEach((hand, hi) => {
+    const kp   = hand.keypoints;
+    const rgb  = hi===0 ? '0,255,238' : '255,0,170';
+
+    // Skeleton
+    ctx.strokeStyle = `rgba(${rgb},.5)`;
+    ctx.lineWidth = 2;
+    CONNECTIONS.forEach(([a,b]) => {
+      if (!kp[a] || !kp[b]) return;
+      ctx.beginPath();
+      ctx.moveTo(cvs.width - kp[a].x*sw, kp[a].y*sh);
+      ctx.lineTo(cvs.width - kp[b].x*sw, kp[b].y*sh);
+      ctx.stroke();
+    });
+
+    // All joints — small dots
+    kp.forEach((p, i) => {
+      const isTip = Object.values(TIPS).includes(i);
+      if (!isTip) {
+        ctx.beginPath();
+        ctx.arc(cvs.width - p.x*sw, p.y*sh, 4, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${rgb},.4)`;
+        ctx.fill();
+      }
+    });
+
+    // Fingertips — big glowing dots
+    TKEYS.forEach((name, fi) => {
+      const p   = kp[TIPS[name]];
+      if (!p) return;
+      const x   = cvs.width - p.x * sw;
+      const y   = p.y * sh;
+      // Store for game collision
+      if (hi === 0 || true) fingerPositions.push({x, y, r: 28});
+      const col = COLS[fi];
+
+      // Radial glow
+      const g = ctx.createRadialGradient(x,y,0, x,y,46);
+      g.addColorStop(0,   col+'cc');
+      g.addColorStop(.35, col+'66');
+      g.addColorStop(1,   col+'00');
+      ctx.beginPath();
+      ctx.arc(x, y, 46, 0, Math.PI*2);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(x, y, 24, 0, Math.PI*2);
+      ctx.strokeStyle = col+'99';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Solid core
+      ctx.beginPath();
+      ctx.arc(x, y, 13, 0, Math.PI*2);
+      ctx.fillStyle = col;
+      ctx.fill();
+
+      // White centre
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI*2);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+
+      // Crosshair
+      ctx.strokeStyle = col;
+      ctx.lineWidth   = 1.5;
+      ctx.globalAlpha = .6;
+      ctx.beginPath(); ctx.moveTo(x-36,y); ctx.lineTo(x+36,y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x,y-36); ctx.lineTo(x,y+36); ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Label
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = col; ctx.shadowBlur = 10;
+      ctx.fillText(name[0].toUpperCase(), x, y-30);
+      ctx.shadowBlur = 0;
+    });
+
+    // Hand label (Left<->Right swapped to match mirror)
+    const w = kp[0];
+    if (w) {
+      const wx = cvs.width - w.x*sw;
+      const wy = w.y*sh;
+      const displayHand = hand.handedness === 'Left' ? 'RIGHT' : 'LEFT';
+      ctx.font = '600 11px Oxanium,monospace';
+      ctx.fillStyle = `rgba(${rgb},1)`;
+      ctx.textAlign = 'center';
+      ctx.fillText(displayHand, wx, wy + 24);
+      if (gameOn) {
+        wristPositions.push({x: wx, y: wy, hand: displayHand});
+        const zh = cvs.height;
+        let zLabel, zCol;
+        if (wy < zh * 0.5)        { zLabel = 'DMG';   zCol = '#ff4444'; }
+        else if (wy >= zh * 0.75) { zLabel = '+HEAL'; zCol = '#00ff88'; }
+        else                       { zLabel = 'NEU';   zCol = '#888888'; }
+        ctx.font = 'bold 9px monospace';
+        ctx.fillStyle = zCol;
+        ctx.fillText(zLabel, wx, wy + 37);
+      }
+    }
+  });
+}
+
+// ── WebSocket / TouchDesigner ─────────────────────────────────────
+function toggleWS() { wsOn ? disconnectWS() : connectWS(); }
+
+function connectWS() {
+  const url = `ws://${document.getElementById('wHost').value.trim()}:${document.getElementById('wPort').value.trim()}`;
+  ws = new WebSocket(url);
+  dWS.className = 'dot warn pulsing';
+  bWs.textContent = '⟳ ŁĄCZENIE...';
+  ws.onopen  = () => { wsOn=true; dWS.className='dot ok'; bWs.textContent='✕ DISCONNECT'; bWs.classList.add('on'); };
+  ws.onclose = () => { wsOn=false; dWS.className='dot'; bWs.textContent='⬡ CONNECT TD'; bWs.classList.remove('on'); };
+  ws.onerror = () => { tick.textContent='❌ Błąd połączenia TD'; dWS.className='dot warn'; };
+}
+
+function disconnectWS() {
+  if(ws) ws.close();
+  wsOn=false; dWS.className='dot'; bWs.textContent='⬡ CONNECT TD'; bWs.classList.remove('on');
+}
+
+function sendTD(hands) {
+  if (!wsOn || !ws || ws.readyState!==WebSocket.OPEN) return;
+  const payload = hands.map(h => ({
+    hand: h.handedness,
+    fingers: TKEYS.map((name, fi) => {
+      const p = h.keypoints[TIPS[name]];
+      return { name, x: +(p.x/cvs.width).toFixed(4), y: +(p.y/cvs.height).toFixed(4) };
+    })
+  }));
+  ws.send(JSON.stringify({ type:'fingertrack', ts:Date.now(), fps:fpsVal, hands: payload }));
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+function setBar(pct) { bar.style.width = pct+'%'; }
+function sleep(ms)   { return new Promise(r=>setTimeout(r,ms)); }
+
+// Preload model on page load so it's ready faster
+loadModel().catch(e => {
+  dML.className = 'dot warn';
+  tick.textContent = 'Błąd ładowania modelu: '+e.message;
+});
+</script>
+</body>
+</html>

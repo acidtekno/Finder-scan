@@ -105,6 +105,8 @@ const wrap  = document.getElementById('wrap');
 
 // ── State ──────────────────────────────────────────────────────────
 let detector = null, rafId = null, ws = null;
+let offCvs = document.createElement('canvas');
+let offCtx = offCvs.getContext('2d');
 let camOn = false, wsOn = false, busy = false;
 let fCount = 0, fpsVal = 0, fpsT = performance.now();
 
@@ -138,9 +140,10 @@ async function loadModel() {
 
   const model = handPoseDetection.SupportedModels.MediaPipeHands;
   const cfg   = {
-    runtime: 'tfjs',          // tfjs runtime — no WASM files needed
-    modelType: 'lite',        // faster on phones
+    runtime: 'tfjs',
+    modelType: 'lite',
     maxHands: 2,
+    scoreThreshold: 0.4,
   };
 
   detector = await handPoseDetection.createDetector(model, cfg);
@@ -226,7 +229,11 @@ async function loop() {
   busy = true;
 
   try {
-    const hands = await detector.estimateHands(vid, { flipHorizontal: true });
+    // Draw current video frame to offscreen canvas (more reliable on mobile)
+    offCvs.width  = vid.videoWidth  || 640;
+    offCvs.height = vid.videoHeight || 480;
+    offCtx.drawImage(vid, 0, 0, offCvs.width, offCvs.height);
+    const hands = await detector.estimateHands(offCvs, { flipHorizontal: false });
     draw(hands);
     sendTD(hands);
 
@@ -258,8 +265,10 @@ function draw(hands) {
   if (!hands.length) return;
 
   // Scale from video coords to canvas coords
-  const sw = cvs.width  / (vid.videoWidth  || cvs.width);
-  const sh = cvs.height / (vid.videoHeight || cvs.height);
+  const vw = vid.videoWidth  || offCvs.width  || cvs.width;
+  const vh = vid.videoHeight || offCvs.height || cvs.height;
+  const sw = cvs.width  / vw;
+  const sh = cvs.height / vh;
 
   hands.forEach((hand, hi) => {
     const kp   = hand.keypoints;
@@ -271,8 +280,8 @@ function draw(hands) {
     CONNECTIONS.forEach(([a,b]) => {
       if (!kp[a] || !kp[b]) return;
       ctx.beginPath();
-      ctx.moveTo(kp[a].x*sw, kp[a].y*sh);
-      ctx.lineTo(kp[b].x*sw, kp[b].y*sh);
+      ctx.moveTo(cvs.width - kp[a].x*sw, kp[a].y*sh);
+      ctx.lineTo(cvs.width - kp[b].x*sw, kp[b].y*sh);
       ctx.stroke();
     });
 
@@ -281,7 +290,7 @@ function draw(hands) {
       const isTip = Object.values(TIPS).includes(i);
       if (!isTip) {
         ctx.beginPath();
-        ctx.arc(p.x*sw, p.y*sh, 4, 0, Math.PI*2);
+        ctx.arc(cvs.width - p.x*sw, p.y*sh, 4, 0, Math.PI*2);
         ctx.fillStyle = `rgba(${rgb},.4)`;
         ctx.fill();
       }
@@ -291,7 +300,7 @@ function draw(hands) {
     TKEYS.forEach((name, fi) => {
       const p   = kp[TIPS[name]];
       if (!p) return;
-      const x   = p.x * sw;
+      const x   = cvs.width - p.x * sw;
       const y   = p.y * sh;
       const col = COLS[fi];
 
@@ -347,7 +356,7 @@ function draw(hands) {
       ctx.font = '600 11px Oxanium,monospace';
       ctx.fillStyle = `rgba(${rgb},1)`;
       ctx.textAlign = 'center';
-      ctx.fillText(hand.handedness.toUpperCase(), w.x*sw, w.y*sh + 24);
+      ctx.fillText(hand.handedness.toUpperCase(), cvs.width - w.x*sw, w.y*sh + 24);
     }
   });
 }

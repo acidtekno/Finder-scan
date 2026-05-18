@@ -115,7 +115,7 @@ let fCount = 0, fpsVal = 0, fpsT = performance.now();
 
 // ── Game state ────────────────────────────────────────────────────
 let gameOn = false, score = 0, combo = 0, comboTimer = null;
-let balls = [], spawnTimer = null;
+let balls = [], particles = [], spawnTimer = null;
 let fingerPositions = []; // updated each detection frame
 const scoreEl = document.getElementById('scoreEl');
 const comboEl = document.getElementById('comboEl');
@@ -191,13 +191,61 @@ class Ball {
   }
 }
 
+// ── Particle (explosion fragment) ────────────────────────────────
+class Particle {
+  constructor(x, y, col) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd   = 2 + Math.random() * 7;
+    this.x   = x;
+    this.y   = y;
+    this.vx  = Math.cos(angle) * spd;
+    this.vy  = Math.sin(angle) * spd - 3;
+    this.r   = 3 + Math.random() * 6;
+    this.col = col;
+    this.life= 1.0;
+    this.decay = 0.03 + Math.random() * 0.04;
+    this.grav = 0.18;
+  }
+  update() {
+    this.vy  += this.grav;
+    this.x   += this.vx;
+    this.y   += this.vy;
+    this.life -= this.decay;
+    this.r   *= 0.97;
+  }
+  draw(ctx) {
+    ctx.globalAlpha = Math.max(0, this.life);
+    const g = ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
+    g.addColorStop(0, '#fff');
+    g.addColorStop(0.4, this.col);
+    g.addColorStop(1, this.col+'00');
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r*2, 0, Math.PI*2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  dead() { return this.life <= 0 || this.r < 0.5; }
+}
+
+function explodeBall(ball) {
+  const count = 18 + Math.floor(ball.r * 0.8);
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(ball.x, ball.y, ball.col));
+  }
+  // Flash ring on canvas edge
+  addScore(ball); // bonus for top-wall hit
+  score += 15;    // extra top-wall bonus
+  scoreEl.textContent = score;
+}
+
 function toggleGame() {
   if (!camOn) { tick.textContent = '❌ Najpierw włącz kamerę!'; return; }
   gameOn ? stopGame() : startGame();
 }
 
 function startGame() {
-  gameOn = true; score = 0; combo = 0; balls = [];
+  gameOn = true; score = 0; combo = 0; balls = []; particles = [];
   bGame.textContent = '⏹ STOP GRY';
   bGame.classList.add('on');
   scoreEl.style.display = 'block';
@@ -209,7 +257,7 @@ function startGame() {
 function stopGame() {
   gameOn = false;
   if (spawnTimer) { clearInterval(spawnTimer); spawnTimer = null; }
-  balls = [];
+  balls = []; particles = [];
   bGame.textContent = '🎮 GRA';
   bGame.classList.remove('on');
   scoreEl.style.display = 'none';
@@ -218,6 +266,7 @@ function stopGame() {
 
 function spawnBall() {
   if (!gameOn || !camOn) return;
+  if (balls.length >= 100) return; // max 100
   balls.push(new Ball(cvs));
 }
 
@@ -251,8 +300,22 @@ function updateGame() {
     });
   });
 
-  // Remove balls off screen (missed = no penalty, just disappear)
-  balls = balls.filter(b => !b.isOffScreen(cvs));
+  // Top edge — explode if moving upward
+  const toExplode = [];
+  balls = balls.filter(b => {
+    if (b.y - b.r <= 0 && b.vy < 0) { toExplode.push(b); return false; }
+    return !b.isOffScreen(cvs);
+  });
+  toExplode.forEach(b => explodeBall(b));
+
+  // Update particles
+  particles.forEach(p => p.update());
+  particles = particles.filter(p => !p.dead());
+
+  // Ball count in ticker
+  if (gameOn) {
+    tick.textContent = `🎮 ${score}pkt | ${balls.length}/100 piłek | combo×${combo}`;
+  }
 }
 
 function addScore(ball) {
@@ -274,7 +337,16 @@ function addScore(ball) {
 
 function drawGame(ctx) {
   if (!gameOn) return;
+  particles.forEach(p => p.draw(ctx));
   balls.forEach(b => b.draw(ctx));
+  // Ball count bar at bottom of screen
+  if (balls.length > 0) {
+    const pct = balls.length / 100;
+    ctx.fillStyle = pct > 0.8 ? '#ff4444' : pct > 0.5 ? '#ff6600' : '#00ffee';
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(0, cvs.height - 4, cvs.width * pct, 4);
+    ctx.globalAlpha = 1;
+  }
 }
 
 // Keypoint indices for MediaPipe Hands model

@@ -12,7 +12,7 @@
     --magenta: #ff00aa;
     --orange: #ff6600;
     --bg: #050810;
-    --panel: rgba(0,20,40,0.85);
+    --panel: rgba(0,20,40,0.88);
     --border: rgba(0,255,238,0.15);
   }
 
@@ -28,20 +28,18 @@
     flex-direction: column;
   }
 
-  /* Scanline overlay */
   body::before {
     content: '';
     position: fixed;
     inset: 0;
     background: repeating-linear-gradient(
       0deg, transparent, transparent 2px,
-      rgba(0,255,238,0.015) 2px, rgba(0,255,238,0.015) 4px
+      rgba(0,255,238,0.013) 2px, rgba(0,255,238,0.013) 4px
     );
     pointer-events: none;
     z-index: 100;
   }
 
-  /* Header */
   header {
     display: flex;
     align-items: center;
@@ -64,9 +62,9 @@
 
   .status-row {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     letter-spacing: 0.08em;
   }
 
@@ -75,19 +73,16 @@
     border-radius: 50%;
     background: #333;
     transition: background 0.3s, box-shadow 0.3s;
+    flex-shrink: 0;
   }
-  .dot.active { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
-  .dot.warn    { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
-  .dot.ok      { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+  .dot.active { background: var(--cyan);   box-shadow: 0 0 8px var(--cyan); }
+  .dot.warn   { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .dot.ok     { background: #00ff88;       box-shadow: 0 0 8px #00ff88; }
 
-  /* Camera area */
   .cam-wrap {
     flex: 1;
     position: relative;
     overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   video {
@@ -95,54 +90,62 @@
     width: 100%; height: 100%;
     object-fit: cover;
     transform: scaleX(-1);
-    opacity: 0;
+    z-index: 0;
   }
 
   canvas#overlay {
     position: absolute;
+    inset: 0;
     width: 100%; height: 100%;
-    object-fit: cover;
+    z-index: 1;
   }
 
   .placeholder {
     position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
+    gap: 14px;
     color: rgba(0,255,238,0.4);
     font-size: 0.75rem;
     letter-spacing: 0.1em;
+    z-index: 2;
+    background: var(--bg);
+    text-align: center;
+    padding: 20px;
   }
 
-  .placeholder svg {
-    width: 64px; height: 64px;
-    opacity: 0.3;
-  }
+  .placeholder svg { width: 64px; height: 64px; opacity: 0.3; }
 
-  /* Corner decorations */
-  .corner {
-    position: absolute;
-    width: 24px; height: 24px;
-    opacity: 0.4;
-  }
-  .corner.tl { top: 8px; left: 8px; border-top: 2px solid var(--cyan); border-left: 2px solid var(--cyan); }
-  .corner.tr { top: 8px; right: 8px; border-top: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
-  .corner.bl { bottom: 8px; left: 8px; border-bottom: 2px solid var(--cyan); border-left: 2px solid var(--cyan); }
-  .corner.br { bottom: 8px; right: 8px; border-bottom: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
+  .corner { position: absolute; width: 24px; height: 24px; opacity: 0.4; z-index: 3; }
+  .corner.tl { top:8px;    left:8px;  border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+  .corner.tr { top:8px;    right:8px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+  .corner.bl { bottom:8px; left:8px;  border-bottom:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+  .corner.br { bottom:8px; right:8px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); }
 
-  /* FPS counter */
   .fps {
     position: absolute;
-    top: 10px;
-    left: 50%;
+    top: 10px; left: 50%;
     transform: translateX(-50%);
     font-size: 0.6rem;
     color: rgba(0,255,238,0.5);
     letter-spacing: 0.1em;
+    z-index: 3;
   }
 
-  /* Bottom panel */
+  .loading-bar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 2px;
+    background: var(--cyan);
+    width: 0%;
+    transition: width 0.4s;
+    box-shadow: 0 0 8px var(--cyan);
+    z-index: 4;
+  }
+
   .panel {
     background: var(--panel);
     border-top: 1px solid var(--border);
@@ -158,11 +161,7 @@
     gap: 8px;
   }
 
-  .field-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
 
   label {
     font-size: 0.55rem;
@@ -185,11 +184,7 @@
   }
   input[type="text"]:focus { border-color: var(--cyan); }
 
-  .btn-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
-  }
+  .btn-row { display: flex; gap: 8px; margin-top: 10px; }
 
   button {
     font-family: 'Oxanium', monospace;
@@ -203,51 +198,29 @@
     cursor: pointer;
     flex: 1;
     transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  #btnCam {
-    background: var(--cyan);
-    color: var(--bg);
-  }
+  #btnCam { background: var(--cyan); color: var(--bg); }
   #btnCam:active { transform: scale(0.97); }
-  #btnCam.active { background: var(--magenta); }
+  #btnCam.active { background: var(--magenta); color: #fff; }
 
-  #btnWS {
-    background: transparent;
-    border: 1px solid var(--cyan);
-    color: var(--cyan);
-  }
+  #btnWS { background: transparent; border: 1px solid var(--cyan); color: var(--cyan); }
   #btnWS:active { transform: scale(0.97); }
   #btnWS.connected { border-color: #00ff88; color: #00ff88; }
 
-  /* Finger data ticker */
   .ticker {
     margin-top: 8px;
     font-size: 0.6rem;
-    color: rgba(0,255,238,0.4);
-    letter-spacing: 0.06em;
+    color: rgba(0,255,238,0.45);
+    letter-spacing: 0.04em;
     height: 16px;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
-  /* Loading indicator */
-  .loading-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    height: 2px;
-    background: var(--cyan);
-    width: 0%;
-    transition: width 0.3s;
-    box-shadow: 0 0 8px var(--cyan);
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   .pulsing { animation: pulse 1s infinite; }
 </style>
 </head>
@@ -256,17 +229,14 @@
 <header>
   <div class="logo">FINGER<span>TRACK</span></div>
   <div class="status-row">
-    <div class="dot" id="dotCam" title="Kamera"></div>
-    <span style="font-size:0.6rem;opacity:0.5">CAM</span>
-    <div class="dot" id="dotMP" title="MediaPipe"></div>
-    <span style="font-size:0.6rem;opacity:0.5">ML</span>
-    <div class="dot" id="dotWS" title="TouchDesigner"></div>
-    <span style="font-size:0.6rem;opacity:0.5">TD</span>
+    <div class="dot" id="dotCam"></div><span>CAM</span>
+    <div class="dot" id="dotMP"></div><span>ML</span>
+    <div class="dot" id="dotWS"></div><span>TD</span>
   </div>
 </header>
 
 <div class="cam-wrap" id="camWrap">
-  <video id="video" autoplay playsinline muted></video>
+  <video id="video" autoplay playsinline webkit-playsinline muted></video>
   <canvas id="overlay"></canvas>
 
   <div class="placeholder" id="placeholder">
@@ -276,7 +246,7 @@
       <circle cx="32" cy="34" r="4" fill="currentColor"/>
       <rect x="24" y="12" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/>
     </svg>
-    <span>Kliknij START aby włączyć kamerę</span>
+    <span id="placeholderMsg">Kliknij START aby włączyć kamerę</span>
   </div>
 
   <div class="corner tl"></div>
@@ -291,52 +261,48 @@
   <div class="panel-grid">
     <div class="field-group">
       <label>TouchDesigner IP</label>
-      <input type="text" id="wsHost" value="192.168.1.100" placeholder="192.168.1.x">
+      <input type="text" id="wsHost" value="192.168.1.100">
     </div>
     <div class="field-group">
       <label>Port WebSocket</label>
-      <input type="text" id="wsPort" value="9980" placeholder="9980">
+      <input type="text" id="wsPort" value="9980">
     </div>
   </div>
   <div class="btn-row">
     <button id="btnCam" onclick="toggleCamera()">▶ START</button>
-    <button id="btnWS" onclick="toggleWS()">⬡ CONNECT TD</button>
+    <button id="btnWS"  onclick="toggleWS()">⬡ CONNECT TD</button>
   </div>
-  <div class="ticker" id="ticker">oczekiwanie na dane...</div>
+  <div class="ticker" id="ticker">oczekiwanie...</div>
 </div>
 
-<!-- MediaPipe via CDN -->
+<!-- ONLY @mediapipe/hands — Camera utility removed (causes NotReadableError on iOS) -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
 
 <script>
-const video    = document.getElementById('video');
-const canvas   = document.getElementById('overlay');
-const ctx      = canvas.getContext('2d');
-const dotCam   = document.getElementById('dotCam');
-const dotMP    = document.getElementById('dotMP');
-const dotWS    = document.getElementById('dotWS');
-const btnCam   = document.getElementById('btnCam');
-const btnWS    = document.getElementById('btnWS');
-const ticker   = document.getElementById('ticker');
-const fpsEl    = document.getElementById('fpsDisplay');
-const placeholder = document.getElementById('placeholder');
-const loadingBar  = document.getElementById('loadingBar');
-const camWrap  = document.getElementById('camWrap');
+const video          = document.getElementById('video');
+const canvas         = document.getElementById('overlay');
+const ctx            = canvas.getContext('2d');
+const dotCam         = document.getElementById('dotCam');
+const dotMP          = document.getElementById('dotMP');
+const dotWS          = document.getElementById('dotWS');
+const btnCam         = document.getElementById('btnCam');
+const btnWS          = document.getElementById('btnWS');
+const ticker         = document.getElementById('ticker');
+const fpsEl          = document.getElementById('fpsDisplay');
+const placeholder    = document.getElementById('placeholder');
+const placeholderMsg = document.getElementById('placeholderMsg');
+const loadingBar     = document.getElementById('loadingBar');
+const camWrap        = document.getElementById('camWrap');
 
-let hands = null, mpCamera = null, ws = null;
-let camActive = false, wsConnected = false;
-let lastFrame = 0, fps = 0, frameCount = 0, lastFPSTime = 0;
-let lastResults = null;
+let hands = null, rafId = null, ws = null;
+let camActive = false, wsConnected = false, processing = false;
+let fps = 0, frameCount = 0, lastFPSTime = performance.now();
 
-// Finger tip indices in MediaPipe hand landmarks
-const FINGER_TIPS = [4, 8, 12, 16, 20];
-const FINGER_NAMES = ['THUMB', 'INDEX', 'MIDDLE', 'RING', 'PINKY'];
-
-// Colors per finger
+const FINGER_TIPS   = [4, 8, 12, 16, 20];
+const FINGER_NAMES  = ['THUMB','INDEX','MIDDLE','RING','PINKY'];
 const FINGER_COLORS = ['#ff6600','#00ffee','#ff00aa','#aaff00','#aa00ff'];
 
+// ── Canvas resize ──────────────────────────────────────────────────
 function resizeCanvas() {
   canvas.width  = camWrap.offsetWidth;
   canvas.height = camWrap.offsetHeight;
@@ -344,141 +310,152 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
-// ─── MediaPipe Init ───────────────────────────────────────────────
+// ── MediaPipe init ─────────────────────────────────────────────────
 function initMediaPipe() {
-  loadingBar.style.width = '20%';
   dotMP.className = 'dot warn pulsing';
 
   hands = new Hands({
-    locateFile: (f) =>
+    locateFile: f =>
       `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
   });
-
   hands.setOptions({
     maxNumHands: 2,
     modelComplexity: 1,
-    minDetectionConfidence: 0.75,
-    minTrackingConfidence: 0.6,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.55,
   });
-
   hands.onResults(onResults);
-  loadingBar.style.width = '60%';
 }
 
-// ─── Camera ───────────────────────────────────────────────────────
+// ── Camera ─────────────────────────────────────────────────────────
 async function toggleCamera() {
-  if (!camActive) {
-    await startCamera();
-  } else {
-    stopCamera();
-  }
-}
-
-async function tryGetCamera(constraints) {
-  return navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+  if (camActive) { stopCamera(); return; }
+  await startCamera();
 }
 
 async function startCamera() {
   if (!hands) initMediaPipe();
 
   dotCam.className = 'dot warn pulsing';
-  ticker.textContent = 'Szukam kamery...';
+  loadingBar.style.width = '15%';
 
-  // Kolejność prób: tylna HD → tylna → przednia → cokolwiek
-  const attempts = [
-    { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-    { facingMode: { exact: 'environment' } },
-    { facingMode: 'user' },
-    true   // any camera
+  // Try from simplest to most specific — avoids NotReadableError on iOS
+  const tries = [
+    { video: true,                             audio: false },
+    { video: { facingMode: 'environment' },    audio: false },
+    { video: { facingMode: 'user' },           audio: false },
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false },
   ];
 
   let stream = null;
-  let usedConstraints = null;
 
-  for (const c of attempts) {
+  for (let i = 0; i < tries.length; i++) {
     try {
-      ticker.textContent = `Próbuję: ${JSON.stringify(c).slice(0,40)}...`;
-      stream = await tryGetCamera(c);
-      usedConstraints = c;
+      placeholderMsg.textContent = `Próba ${i+1}/${tries.length}...`;
+      stream = await navigator.mediaDevices.getUserMedia(tries[i]);
       break;
-    } catch (e) {
-      console.warn('Próba nieudana:', c, e.name);
-      await new Promise(r => setTimeout(r, 300));
+    } catch(e) {
+      console.warn(`Próba ${i+1} nieudana:`, e.name, e.message);
+      if (i < tries.length - 1) await sleep(350);
     }
   }
 
   if (!stream) {
     dotCam.className = 'dot warn';
-    ticker.textContent = '❌ Brak dostępu do kamery. Zamknij inne apki i odśwież.';
+    placeholderMsg.textContent = '❌ Kamera niedostępna. Zamknij inne apki i odśwież stronę.';
+    ticker.textContent = 'Błąd: NotReadableError — inna apka trzyma kamerę';
     btnCam.textContent = '▶ START';
-    btnCam.classList.remove('active');
+    loadingBar.style.width = '0%';
     return;
   }
 
   video.srcObject = stream;
+
+  // Wait for metadata then play
+  await new Promise(resolve => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => resolve();
+  });
+
+  try { await video.play(); } catch(e) { console.warn('play():', e); }
+
   placeholder.style.display = 'none';
   dotCam.className = 'dot ok';
+  loadingBar.style.width = '60%';
 
-  const track = stream.getVideoTracks()[0];
-  const settings = track.getSettings();
-  ticker.textContent = `Kamera: ${settings.width}×${settings.height} | ${track.label.slice(0,30)}`;
-
-  mpCamera = new Camera(video, {
-    onFrame: async () => {
-      if (hands) await hands.send({ image: video });
-      countFPS();
-    },
-    width: settings.width || 1280,
-    height: settings.height || 720,
-  });
-  mpCamera.start();
+  const t = stream.getVideoTracks()[0];
+  const s = t.getSettings();
+  ticker.textContent = `Kamera: ${s.width||'?'}×${s.height||'?'} | ${(t.label||'unknown').slice(0,28)}`;
 
   camActive = true;
   btnCam.textContent = '■ STOP';
   btnCam.classList.add('active');
+
+  // Warm up model with first frame
+  try {
+    await hands.send({ image: video });
+    dotMP.className = 'dot ok';
+  } catch(e) {
+    dotMP.className = 'dot ok'; // non-fatal
+  }
+
   loadingBar.style.width = '100%';
-  setTimeout(() => { loadingBar.style.width = '0%'; }, 600);
-  dotMP.className = 'dot ok';
+  setTimeout(() => loadingBar.style.width = '0%', 500);
+
+  startLoop();
+}
+
+function startLoop() {
+  async function loop() {
+    if (!camActive) return;
+
+    if (!processing && video.readyState >= 2 && !video.paused) {
+      processing = true;
+      try { await hands.send({ image: video }); }
+      catch(e) { console.warn(e); }
+      processing = false;
+
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFPSTime >= 1000) {
+        fps = frameCount;
+        frameCount = 0;
+        lastFPSTime = now;
+        fpsEl.textContent = fps + ' FPS';
+      }
+    }
+
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
 }
 
 function stopCamera() {
-  if (mpCamera) { mpCamera.stop(); mpCamera = null; }
+  camActive = false;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
     video.srcObject = null;
   }
-  camActive = false;
   btnCam.textContent = '▶ START';
   btnCam.classList.remove('active');
   dotCam.className = 'dot';
   dotMP.className = 'dot';
   placeholder.style.display = 'flex';
+  placeholderMsg.textContent = 'Kliknij START aby włączyć kamerę';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   fpsEl.textContent = '';
 }
 
-function countFPS() {
-  frameCount++;
-  const now = performance.now();
-  if (now - lastFPSTime >= 1000) {
-    fps = frameCount;
-    frameCount = 0;
-    lastFPSTime = now;
-    fpsEl.textContent = `${fps} FPS`;
-  }
-}
-
-// ─── Draw Results ─────────────────────────────────────────────────
+// ── Rendering ──────────────────────────────────────────────────────
 function onResults(results) {
-  lastResults = results;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Mirror context to match flipped video
   ctx.save();
   ctx.scale(-1, 1);
   ctx.translate(-canvas.width, 0);
 
-  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+  if (!results.multiHandLandmarks?.length) {
     ctx.restore();
     sendToTD(null);
     return;
@@ -486,82 +463,33 @@ function onResults(results) {
 
   const tdData = [];
 
-  results.multiHandLandmarks.forEach((landmarks, handIdx) => {
-    const handedness = results.multiHandedness?.[handIdx]?.label || 'Unknown';
+  results.multiHandLandmarks.forEach((lms, hi) => {
+    const side = results.multiHandedness?.[hi]?.label || 'Hand';
 
-    // Draw skeleton connections
-    drawConnections(landmarks, handIdx);
+    drawSkeleton(lms, hi);
+    drawLandmarks(lms, hi);
 
-    // Draw all landmark dots
-    landmarks.forEach((lm, i) => {
-      const x = lm.x * canvas.width;
-      const y = lm.y * canvas.height;
-      const isTip = FINGER_TIPS.includes(i);
-
-      if (isTip) {
-        const fi = FINGER_TIPS.indexOf(i);
-        const color = FINGER_COLORS[fi];
-        // Outer glow ring
-        ctx.beginPath();
-        ctx.arc(x, y, 18, 0, Math.PI * 2);
-        ctx.strokeStyle = color + '44';
-        ctx.lineWidth = 8;
-        ctx.stroke();
-        // Main circle
-        ctx.beginPath();
-        ctx.arc(x, y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = color + 'cc';
-        ctx.fill();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        // Crosshair
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1;
-        ctx.globalAlpha = 0.5;
-        ctx.beginPath(); ctx.moveTo(x-22, y); ctx.lineTo(x+22, y); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x, y-22); ctx.lineTo(x, y+22); ctx.stroke();
-        ctx.globalAlpha = 1;
-        // Label
-        ctx.fillStyle = '#fff';
-        ctx.font = '700 9px "Share Tech Mono"';
-        ctx.textAlign = 'center';
-        ctx.fillText(FINGER_NAMES[fi][0], x, y - 16);
-      } else {
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,255,238,0.5)';
-        ctx.fill();
-      }
-    });
-
-    // Hand label
-    const wrist = landmarks[0];
-    ctx.font = '600 11px "Oxanium"';
-    ctx.fillStyle = handIdx === 0 ? '#00ffee' : '#ff00aa';
+    ctx.font = '600 10px Oxanium, monospace';
+    ctx.fillStyle = hi === 0 ? '#00ffee' : '#ff00aa';
     ctx.textAlign = 'center';
-    ctx.fillText(handedness.toUpperCase() + ' HAND', wrist.x * canvas.width, wrist.y * canvas.height + 24);
+    ctx.fillText(side.toUpperCase(), lms[0].x * canvas.width, lms[0].y * canvas.height + 22);
 
-    // Build TD data
-    const fingers = FINGER_TIPS.map((tipIdx, fi) => {
-      const lm = landmarks[tipIdx];
-      return {
+    tdData.push({
+      hand: side,
+      fingers: FINGER_TIPS.map((ti, fi) => ({
         name: FINGER_NAMES[fi],
-        x: parseFloat((1 - lm.x).toFixed(4)),   // mirror X for real-world coords
-        y: parseFloat(lm.y.toFixed(4)),
-        z: parseFloat(lm.z.toFixed(4))
-      };
+        x: parseFloat((1 - lms[ti].x).toFixed(4)),
+        y: parseFloat(lms[ti].y.toFixed(4)),
+        z: parseFloat(lms[ti].z.toFixed(4))
+      }))
     });
-
-    tdData.push({ hand: handedness, fingers });
   });
 
   ctx.restore();
 
-  // Ticker update
-  if (tdData.length > 0) {
-    const f0 = tdData[0].fingers;
-    ticker.textContent = `[${tdData[0].hand}] INDEX(${f0[1].x},${f0[1].y}) MIDDLE(${f0[2].x},${f0[2].y}) — ${tdData.length} hand(s)`;
+  if (tdData.length) {
+    const f = tdData[0].fingers;
+    ticker.textContent = `[${tdData[0].hand}] IDX(${f[1].x},${f[1].y}) MID(${f[2].x},${f[2].y})`;
   } else {
     ticker.textContent = 'brak dłoni w kadrze';
   }
@@ -569,43 +497,71 @@ function onResults(results) {
   sendToTD(tdData.length ? tdData : null);
 }
 
-function drawConnections(lms, hIdx) {
-  const connections = [
-    // Thumb
+function drawSkeleton(lms, hi) {
+  const pairs = [
     [0,1],[1,2],[2,3],[3,4],
-    // Index
     [0,5],[5,6],[6,7],[7,8],
-    // Middle
     [5,9],[9,10],[10,11],[11,12],
-    // Ring
     [9,13],[13,14],[14,15],[15,16],
-    // Pinky
     [13,17],[17,18],[18,19],[19,20],
-    // Palm
     [0,17]
   ];
-
-  const baseColor = hIdx === 0 ? '0,255,238' : '255,0,170';
-
-  connections.forEach(([a, b]) => {
-    const ax = lms[a].x * canvas.width, ay = lms[a].y * canvas.height;
-    const bx = lms[b].x * canvas.width, by = lms[b].y * canvas.height;
+  const rgb = hi === 0 ? '0,255,238' : '255,0,170';
+  ctx.strokeStyle = `rgba(${rgb},0.3)`;
+  ctx.lineWidth = 1.5;
+  pairs.forEach(([a,b]) => {
     ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
-    ctx.strokeStyle = `rgba(${baseColor},0.35)`;
-    ctx.lineWidth = 1.5;
+    ctx.moveTo(lms[a].x * canvas.width, lms[a].y * canvas.height);
+    ctx.lineTo(lms[b].x * canvas.width, lms[b].y * canvas.height);
     ctx.stroke();
   });
 }
 
-// ─── WebSocket / TouchDesigner ─────────────────────────────────────
+function drawLandmarks(lms, hi) {
+  lms.forEach((lm, i) => {
+    const x  = lm.x * canvas.width;
+    const y  = lm.y * canvas.height;
+    const fi = FINGER_TIPS.indexOf(i);
+
+    if (fi >= 0) {
+      const col = FINGER_COLORS[fi];
+      ctx.beginPath();
+      ctx.arc(x, y, 18, 0, Math.PI*2);
+      ctx.strokeStyle = col + '33';
+      ctx.lineWidth = 10;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(x, y, 9, 0, Math.PI*2);
+      ctx.fillStyle = col + 'bb';
+      ctx.fill();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x-22,y); ctx.lineTo(x+22,y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x,y-22); ctx.lineTo(x,y+22); ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(FINGER_NAMES[fi][0], x, y - 15);
+    } else {
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(0,255,238,0.45)';
+      ctx.fill();
+    }
+  });
+}
+
+// ── WebSocket / TouchDesigner ──────────────────────────────────────
 function toggleWS() {
-  if (!wsConnected) {
-    connectWS();
-  } else {
-    disconnectWS();
-  }
+  wsConnected ? disconnectWS() : connectWS();
 }
 
 function connectWS() {
@@ -613,34 +569,27 @@ function connectWS() {
   const port = document.getElementById('wsPort').value.trim();
   const url  = `ws://${host}:${port}`;
 
-  try {
-    ws = new WebSocket(url);
-    dotWS.className = 'dot warn pulsing';
-    btnWS.textContent = '⟳ ŁĄCZENIE...';
+  ws = new WebSocket(url);
+  dotWS.className = 'dot warn pulsing';
+  btnWS.textContent = '⟳ ŁĄCZENIE...';
 
-    ws.onopen = () => {
-      wsConnected = true;
-      dotWS.className = 'dot ok';
-      btnWS.textContent = '✕ DISCONNECT TD';
-      btnWS.classList.add('connected');
-      ticker.textContent = 'Połączono z TouchDesigner na ' + url;
-    };
-
-    ws.onclose = () => {
-      wsConnected = false;
-      dotWS.className = 'dot';
-      btnWS.textContent = '⬡ CONNECT TD';
-      btnWS.classList.remove('connected');
-    };
-
-    ws.onerror = () => {
-      ticker.textContent = `Błąd: nie można połączyć z ${url}`;
-      dotWS.className = 'dot warn';
-    };
-
-  } catch(e) {
-    ticker.textContent = 'Błąd WebSocket: ' + e.message;
-  }
+  ws.onopen  = () => {
+    wsConnected = true;
+    dotWS.className = 'dot ok';
+    btnWS.textContent = '✕ DISCONNECT';
+    btnWS.classList.add('connected');
+    ticker.textContent = `Połączono z TouchDesigner @ ${url}`;
+  };
+  ws.onclose = () => {
+    wsConnected = false;
+    dotWS.className = 'dot';
+    btnWS.textContent = '⬡ CONNECT TD';
+    btnWS.classList.remove('connected');
+  };
+  ws.onerror = () => {
+    ticker.textContent = `❌ Brak połączenia z ${url}`;
+    dotWS.className = 'dot warn';
+  };
 }
 
 function disconnectWS() {
@@ -653,14 +602,10 @@ function disconnectWS() {
 
 function sendToTD(data) {
   if (!wsConnected || !ws || ws.readyState !== WebSocket.OPEN) return;
-  const payload = {
-    type: 'fingertrack',
-    timestamp: Date.now(),
-    fps: fps,
-    hands: data ?? []
-  };
-  ws.send(JSON.stringify(payload));
+  ws.send(JSON.stringify({ type:'fingertrack', timestamp:Date.now(), fps, hands: data ?? [] }));
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 </script>
 </body>
 </html>

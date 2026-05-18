@@ -91,6 +91,7 @@
     object-fit: cover;
     transform: scaleX(-1);
     z-index: 0;
+    filter: brightness(0.3) saturate(0.5);
   }
 
   canvas#overlay {
@@ -507,7 +508,7 @@ function drawSkeleton(lms, hi) {
     [0,17]
   ];
   const rgb = hi === 0 ? '0,255,238' : '255,0,170';
-  ctx.strokeStyle = `rgba(${rgb},0.3)`;
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
   ctx.lineWidth = 1.5;
   pairs.forEach(([a,b]) => {
     ctx.beginPath();
@@ -525,35 +526,57 @@ function drawLandmarks(lms, hi) {
 
     if (fi >= 0) {
       const col = FINGER_COLORS[fi];
-      ctx.beginPath();
-      ctx.arc(x, y, 18, 0, Math.PI*2);
-      ctx.strokeStyle = col + '33';
-      ctx.lineWidth = 10;
-      ctx.stroke();
 
+      // Outer soft glow (large)
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, 42);
+      grad.addColorStop(0,   col + 'aa');
+      grad.addColorStop(0.4, col + '44');
+      grad.addColorStop(1,   col + '00');
       ctx.beginPath();
-      ctx.arc(x, y, 9, 0, Math.PI*2);
-      ctx.fillStyle = col + 'bb';
+      ctx.arc(x, y, 42, 0, Math.PI*2);
+      ctx.fillStyle = grad;
       ctx.fill();
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 2;
+
+      // Mid ring
+      ctx.beginPath();
+      ctx.arc(x, y, 22, 0, Math.PI*2);
+      ctx.strokeStyle = col + '88';
+      ctx.lineWidth = 3;
       ctx.stroke();
 
-      ctx.globalAlpha = 0.45;
+      // Solid core dot
+      ctx.beginPath();
+      ctx.arc(x, y, 12, 0, Math.PI*2);
+      ctx.fillStyle = col;
+      ctx.fill();
+
+      // White center
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI*2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // Crosshair lines
+      ctx.globalAlpha = 0.7;
       ctx.strokeStyle = col;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x-22,y); ctx.lineTo(x+22,y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x,y-22); ctx.lineTo(x,y+22); ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x-34,y); ctx.lineTo(x+34,y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x,y-34); ctx.lineTo(x,y+34); ctx.stroke();
       ctx.globalAlpha = 1;
 
+      // Label
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 9px monospace';
+      ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(FINGER_NAMES[fi][0], x, y - 15);
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 8;
+      ctx.fillText(FINGER_NAMES[fi][0], x, y - 28);
+      ctx.shadowBlur = 0;
     } else {
+      // Non-tip joints: small dim dot
       ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(0,255,238,0.45)';
+      ctx.arc(x, y, 3.5, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(0,255,238,0.35)';
       ctx.fill();
     }
   });

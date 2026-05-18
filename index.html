@@ -374,40 +374,71 @@ async function toggleCamera() {
   }
 }
 
+async function tryGetCamera(constraints) {
+  return navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+}
+
 async function startCamera() {
-  try {
-    if (!hands) initMediaPipe();
+  if (!hands) initMediaPipe();
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false
-    });
-    video.srcObject = stream;
-    placeholder.style.display = 'none';
-    dotCam.className = 'dot ok';
+  dotCam.className = 'dot warn pulsing';
+  ticker.textContent = 'Szukam kamery...';
 
-    mpCamera = new Camera(video, {
-      onFrame: async () => {
-        if (hands) await hands.send({ image: video });
-        countFPS();
-      },
-      width: 1280,
-      height: 720,
-    });
-    mpCamera.start();
+  // Kolejność prób: tylna HD → tylna → przednia → cokolwiek
+  const attempts = [
+    { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+    { facingMode: { exact: 'environment' } },
+    { facingMode: 'user' },
+    true   // any camera
+  ];
 
-    camActive = true;
-    btnCam.textContent = '■ STOP';
-    btnCam.classList.add('active');
-    loadingBar.style.width = '100%';
-    setTimeout(() => { loadingBar.style.width = '0%'; }, 600);
-    dotMP.className = 'dot ok';
+  let stream = null;
+  let usedConstraints = null;
 
-  } catch (e) {
-    console.error(e);
-    dotCam.className = 'dot warn';
-    ticker.textContent = 'Błąd kamery: ' + e.message;
+  for (const c of attempts) {
+    try {
+      ticker.textContent = `Próbuję: ${JSON.stringify(c).slice(0,40)}...`;
+      stream = await tryGetCamera(c);
+      usedConstraints = c;
+      break;
+    } catch (e) {
+      console.warn('Próba nieudana:', c, e.name);
+      await new Promise(r => setTimeout(r, 300));
+    }
   }
+
+  if (!stream) {
+    dotCam.className = 'dot warn';
+    ticker.textContent = '❌ Brak dostępu do kamery. Zamknij inne apki i odśwież.';
+    btnCam.textContent = '▶ START';
+    btnCam.classList.remove('active');
+    return;
+  }
+
+  video.srcObject = stream;
+  placeholder.style.display = 'none';
+  dotCam.className = 'dot ok';
+
+  const track = stream.getVideoTracks()[0];
+  const settings = track.getSettings();
+  ticker.textContent = `Kamera: ${settings.width}×${settings.height} | ${track.label.slice(0,30)}`;
+
+  mpCamera = new Camera(video, {
+    onFrame: async () => {
+      if (hands) await hands.send({ image: video });
+      countFPS();
+    },
+    width: settings.width || 1280,
+    height: settings.height || 720,
+  });
+  mpCamera.start();
+
+  camActive = true;
+  btnCam.textContent = '■ STOP';
+  btnCam.classList.add('active');
+  loadingBar.style.width = '100%';
+  setTimeout(() => { loadingBar.style.width = '0%'; }, 600);
+  dotMP.className = 'dot ok';
 }
 
 function stopCamera() {

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FingerTrack → TouchDesigner</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Oxanium:wght@300;600;800&display=swap');
+
+  :root {
+    --cyan: #00ffee;
+    --magenta: #ff00aa;
+    --orange: #ff6600;
+    --bg: #050810;
+    --panel: rgba(0,20,40,0.88);
+    --border: rgba(0,255,238,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,255,238,0.013) 2px, rgba(0,255,238,0.013) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    backdrop-filter: blur(10px);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: 'Oxanium', monospace;
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+  }
+  .logo span { color: var(--magenta); }
+
+  .status-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+  }
+
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #333;
+    transition: background 0.3s, box-shadow 0.3s;
+    flex-shrink: 0;
+  }
+  .dot.active { background: var(--cyan);   box-shadow: 0 0 8px var(--cyan); }
+  .dot.warn   { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .dot.ok     { background: #00ff88;       box-shadow: 0 0 8px #00ff88; }
+
+  .cam-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  video {
+    position: absolute;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    z-index: 0;
+    filter: brightness(0.3) saturate(0.5);
+  }
+
+  canvas#overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+  }
+
+  .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: rgba(0,255,238,0.4);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    z-index: 2;
+    background: var(--bg);
+    text-align: center;
+    padding: 20px;
+  }
+
+  .placeholder svg { width: 64px; height: 64px; opacity: 0.3; }
+
+  .corner { position: absolute; width: 24px; height: 24px; opacity: 0.4; z-index: 3; }
+  .corner.tl { top:8px;    left:8px;  border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+  .corner.tr { top:8px;    right:8px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+  .corner.bl { bottom:8px; left:8px;  border-bottom:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+  .corner.br { bottom:8px; right:8px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+
+  .fps {
+    position: absolute;
+    top: 10px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.6rem;
+    color: rgba(0,255,238,0.5);
+    letter-spacing: 0.1em;
+    z-index: 3;
+  }
+
+  .loading-bar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 2px;
+    background: var(--cyan);
+    width: 0%;
+    transition: width 0.4s;
+    box-shadow: 0 0 8px var(--cyan);
+    z-index: 4;
+  }
+
+  .panel {
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    padding: 10px 14px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .panel-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+
+  label {
+    font-size: 0.55rem;
+    letter-spacing: 0.12em;
+    color: rgba(0,255,238,0.55);
+    text-transform: uppercase;
+  }
+
+  input[type="text"] {
+    background: rgba(0,255,238,0.05);
+    border: 1px solid var(--border);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    padding: 6px 10px;
+    border-radius: 2px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus { border-color: var(--cyan); }
+
+  .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+
+  button {
+    font-family: 'Oxanium', monospace;
+    font-weight: 600;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 8px 0;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    flex: 1;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #btnCam { background: var(--cyan); color: var(--bg); }
+  #btnCam:active { transform: scale(0.97); }
+  #btnCam.active { background: var(--magenta); color: #fff; }
+
+  #btnWS { background: transparent; border: 1px solid var(--cyan); color: var(--cyan); }
+  #btnWS:active { transform: scale(0.97); }
+  #btnWS.connected { border-color: #00ff88; color: #00ff88; }
+
+  .ticker {
+    margin-top: 8px;
+    font-size: 0.6rem;
+    color: rgba(0,255,238,0.45);
+    letter-spacing: 0.04em;
+    height: 16px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .pulsing { animation: pulse 1s infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">FINGER<span>TRACK</span></div>
+  <div class="status-row">
+    <div class="dot" id="dotCam"></div><span>CAM</span>
+    <div class="dot" id="dotMP"></div><span>ML</span>
+    <div class="dot" id="dotWS"></div><span>TD</span>
+  </div>
+</header>
+
+<div class="cam-wrap" id="camWrap">
+  <video id="video" autoplay playsinline webkit-playsinline muted></video>
+  <canvas id="overlay"></canvas>
+
+  <div class="placeholder" id="placeholder">
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="16" width="48" height="36" rx="4" stroke="currentColor" stroke-width="2"/>
+      <circle cx="32" cy="34" r="10" stroke="currentColor" stroke-width="2"/>
+      <circle cx="32" cy="34" r="4" fill="currentColor"/>
+      <rect x="24" y="12" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/>
+    </svg>
+    <span id="placeholderMsg">Kliknij START aby włączyć kamerę</span>
+  </div>
+
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+  <div class="fps" id="fpsDisplay"></div>
+  <div class="loading-bar" id="loadingBar"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-grid">
+    <div class="field-group">
+      <label>TouchDesigner IP</label>
+      <input type="text" id="wsHost" value="192.168.1.100">
+    </div>
+    <div class="field-group">
+      <label>Port WebSocket</label>
+      <input type="text" id="wsPort" value="9980">
+    </div>
+  </div>
+  <div class="btn-row">
+    <button id="btnCam" onclick="toggleCamera()">▶ START</button>
+    <button id="btnWS"  onclick="toggleWS()">⬡ CONNECT TD</button>
+  </div>
+  <div class="ticker" id="ticker">oczekiwanie...</div>
+</div>
+
+<!-- ONLY @mediapipe/hands — Camera utility removed (causes NotReadableError on iOS) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+
+<script>
+const video          = document.getElementById('video');
+const canvas         = document.getElementById('overlay');
+const ctx            = canvas.getContext('2d');
+const dotCam         = document.getElementById('dotCam');
+const dotMP          = document.getElementById('dotMP');
+const dotWS          = document.getElementById('dotWS');
+const btnCam         = document.getElementById('btnCam');
+const btnWS          = document.getElementById('btnWS');
+const ticker         = document.getElementById('ticker');
+const fpsEl          = document.getElementById('fpsDisplay');
+const placeholder    = document.getElementById('placeholder');
+const placeholderMsg = document.getElementById('placeholderMsg');
+const loadingBar     = document.getElementById('loadingBar');
+const camWrap        = document.getElementById('camWrap');
+
+let hands = null, rafId = null, ws = null;
+let camActive = false, wsConnected = false;
+let fps = 0, frameCount = 0, lastFPSTime = performance.now();
+let sendPending = false;
+
+const FINGER_TIPS   = [4, 8, 12, 16, 20];
+const FINGER_NAMES  = ['THUMB','INDEX','MIDDLE','RING','PINKY'];
+const FINGER_COLORS = ['#ff6600','#00ffee','#ff00aa','#aaff00','#aa00ff'];
+
+// ── Canvas resize ──────────────────────────────────────────────────
+function resizeCanvas() {
+  canvas.width  = camWrap.offsetWidth;
+  canvas.height = camWrap.offsetHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ── MediaPipe init ─────────────────────────────────────────────────
+function initMediaPipe() {
+  dotMP.className = 'dot warn pulsing';
+
+  hands = new Hands({
+    locateFile: f =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
+  });
+  hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.5,
+  });
+  hands.onResults(onResults);
+}
+
+// ── Camera ─────────────────────────────────────────────────────────
+async function toggleCamera() {
+  if (camActive) { stopCamera(); return; }
+  await startCamera();
+}
+
+async function startCamera() {
+  if (!hands) initMediaPipe();
+
+  dotCam.className = 'dot warn pulsing';
+  loadingBar.style.width = '15%';
+
+  const tries = [
+    { video: true,                          audio: false },
+    { video: { facingMode: 'environment' }, audio: false },
+    { video: { facingMode: 'user' },        audio: false },
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false },
+  ];
+
+  let stream = null;
+  for (let i = 0; i < tries.length; i++) {
+    try {
+      placeholderMsg.textContent = `Próba ${i+1}/${tries.length}...`;
+      stream = await navigator.mediaDevices.getUserMedia(tries[i]);
+      break;
+    } catch(e) {
+      console.warn(`Próba ${i+1}:`, e.name);
+      if (i < tries.length - 1) await sleep(350);
+    }
+  }
+
+  if (!stream) {
+    dotCam.className = 'dot warn';
+    placeholderMsg.textContent = '❌ Brak kamery. Zamknij inne apki i odśwież.';
+    ticker.textContent = 'NotReadableError — inna apka blokuje kamerę';
+    btnCam.textContent = '▶ START';
+    loadingBar.style.width = '0%';
+    return;
+  }
+
+  video.srcObject = stream;
+  await new Promise(resolve => { video.onloadedmetadata = resolve; });
+  try { await video.play(); } catch(e) { console.warn('play:', e); }
+
+  placeholder.style.display = 'none';
+  dotCam.className = 'dot ok';
+  dotMP.className  = 'dot warn pulsing';
+  loadingBar.style.width = '60%';
+
+  const t = stream.getVideoTracks()[0];
+  const s = t.getSettings();
+  ticker.textContent = `Kamera OK ${s.width||'?'}×${s.height||'?'} — ładuję model ML...`;
+
+  camActive = true;
+  btnCam.textContent = '■ STOP';
+  btnCam.classList.add('active');
+
+  startLoop();
+}
+
+function startLoop() {
+  const TARGET_MS = 1000 / 20; // max 20fps to MediaPipe — stable on phones
+  let lastSendTime = 0;
+  let modelReady   = false;
+
+  async function loop(ts) {
+    if (!camActive) return;
+    rafId = requestAnimationFrame(loop);
+
+    if (video.readyState < 2 || video.paused) return;
+    if (sendPending) return;
+    if (ts - lastSendTime < TARGET_MS) return;
+
+    lastSendTime = ts;
+    sendPending  = true;
+
+    try {
+      await hands.send({ image: video });
+
+      if (!modelReady) {
+        modelReady = true;
+        dotMP.className = 'dot ok';
+        loadingBar.style.width = '100%';
+        setTimeout(() => loadingBar.style.width = '0%', 500);
+        ticker.textContent = 'Model gotowy — pokaż rękę';
+      }
+    } catch(e) {
+      console.warn('hands.send:', e);
+      // don't lock up — just continue next frame
+    } finally {
+      sendPending = false; // ALWAYS release, even on error
+    }
+
+    frameCount++;
+    if (ts - lastFPSTime >= 1000) {
+      fps = Math.round(frameCount * 1000 / (ts - lastFPSTime));
+      frameCount  = 0;
+      lastFPSTime = ts;
+      fpsEl.textContent = fps + ' FPS';
+    }
+  }
+
+  rafId = requestAnimationFrame(loop);
+}
+
+function stopCamera() {
+  camActive   = false;
+  sendPending = false;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  btnCam.textContent = '▶ START';
+  btnCam.classList.remove('active');
+  dotCam.className = 'dot';
+  dotMP.className  = 'dot';
+  placeholder.style.display = 'flex';
+  placeholderMsg.textContent = 'Kliknij START aby włączyć kamerę';
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  fpsEl.textContent = '';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>

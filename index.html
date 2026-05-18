@@ -296,8 +296,9 @@ const loadingBar     = document.getElementById('loadingBar');
 const camWrap        = document.getElementById('camWrap');
 
 let hands = null, rafId = null, ws = null;
-let camActive = false, wsConnected = false, processing = false;
+let camActive = false, wsConnected = false;
 let fps = 0, frameCount = 0, lastFPSTime = performance.now();
+let sendPending = false;
 
 const FINGER_TIPS   = [4, 8, 12, 16, 20];
 const FINGER_NAMES  = ['THUMB','INDEX','MIDDLE','RING','PINKY'];
@@ -322,8 +323,8 @@ function initMediaPipe() {
   hands.setOptions({
     maxNumHands: 2,
     modelComplexity: 1,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.55,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.5,
   });
   hands.onResults(onResults);
 }
@@ -340,99 +341,102 @@ async function startCamera() {
   dotCam.className = 'dot warn pulsing';
   loadingBar.style.width = '15%';
 
-  // Try from simplest to most specific — avoids NotReadableError on iOS
   const tries = [
-    { video: true,                             audio: false },
-    { video: { facingMode: 'environment' },    audio: false },
-    { video: { facingMode: 'user' },           audio: false },
+    { video: true,                          audio: false },
+    { video: { facingMode: 'environment' }, audio: false },
+    { video: { facingMode: 'user' },        audio: false },
     { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false },
   ];
 
   let stream = null;
-
   for (let i = 0; i < tries.length; i++) {
     try {
       placeholderMsg.textContent = `Próba ${i+1}/${tries.length}...`;
       stream = await navigator.mediaDevices.getUserMedia(tries[i]);
       break;
     } catch(e) {
-      console.warn(`Próba ${i+1} nieudana:`, e.name, e.message);
+      console.warn(`Próba ${i+1}:`, e.name);
       if (i < tries.length - 1) await sleep(350);
     }
   }
 
   if (!stream) {
     dotCam.className = 'dot warn';
-    placeholderMsg.textContent = '❌ Kamera niedostępna. Zamknij inne apki i odśwież stronę.';
-    ticker.textContent = 'Błąd: NotReadableError — inna apka trzyma kamerę';
+    placeholderMsg.textContent = '❌ Brak kamery. Zamknij inne apki i odśwież.';
+    ticker.textContent = 'NotReadableError — inna apka blokuje kamerę';
     btnCam.textContent = '▶ START';
     loadingBar.style.width = '0%';
     return;
   }
 
   video.srcObject = stream;
-
-  // Wait for metadata then play
-  await new Promise(resolve => {
-    video.onloadedmetadata = () => resolve();
-    video.onerror = () => resolve();
-  });
-
-  try { await video.play(); } catch(e) { console.warn('play():', e); }
+  await new Promise(resolve => { video.onloadedmetadata = resolve; });
+  try { await video.play(); } catch(e) { console.warn('play:', e); }
 
   placeholder.style.display = 'none';
   dotCam.className = 'dot ok';
+  dotMP.className  = 'dot warn pulsing';
   loadingBar.style.width = '60%';
 
   const t = stream.getVideoTracks()[0];
   const s = t.getSettings();
-  ticker.textContent = `Kamera: ${s.width||'?'}×${s.height||'?'} | ${(t.label||'unknown').slice(0,28)}`;
+  ticker.textContent = `Kamera OK ${s.width||'?'}×${s.height||'?'} — ładuję model ML...`;
 
   camActive = true;
   btnCam.textContent = '■ STOP';
   btnCam.classList.add('active');
 
-  // Warm up model with first frame
-  try {
-    await hands.send({ image: video });
-    dotMP.className = 'dot ok';
-  } catch(e) {
-    dotMP.className = 'dot ok'; // non-fatal
-  }
-
-  loadingBar.style.width = '100%';
-  setTimeout(() => loadingBar.style.width = '0%', 500);
-
   startLoop();
 }
 
 function startLoop() {
-  async function loop() {
+  const TARGET_MS = 1000 / 20; // max 20fps to MediaPipe — stable on phones
+  let lastSendTime = 0;
+  let modelReady   = false;
+
+  async function loop(ts) {
     if (!camActive) return;
+    rafId = requestAnimationFrame(loop);
 
-    if (!processing && video.readyState >= 2 && !video.paused) {
-      processing = true;
-      try { await hands.send({ image: video }); }
-      catch(e) { console.warn(e); }
-      processing = false;
+    if (video.readyState < 2 || video.paused) return;
+    if (sendPending) return;
+    if (ts - lastSendTime < TARGET_MS) return;
 
-      frameCount++;
-      const now = performance.now();
-      if (now - lastFPSTime >= 1000) {
-        fps = frameCount;
-        frameCount = 0;
-        lastFPSTime = now;
-        fpsEl.textContent = fps + ' FPS';
+    lastSendTime = ts;
+    sendPending  = true;
+
+    try {
+      await hands.send({ image: video });
+
+      if (!modelReady) {
+        modelReady = true;
+        dotMP.className = 'dot ok';
+        loadingBar.style.width = '100%';
+        setTimeout(() => loadingBar.style.width = '0%', 500);
+        ticker.textContent = 'Model gotowy — pokaż rękę';
       }
+    } catch(e) {
+      console.warn('hands.send:', e);
+      // don't lock up — just continue next frame
+    } finally {
+      sendPending = false; // ALWAYS release, even on error
     }
 
-    rafId = requestAnimationFrame(loop);
+    frameCount++;
+    if (ts - lastFPSTime >= 1000) {
+      fps = Math.round(frameCount * 1000 / (ts - lastFPSTime));
+      frameCount  = 0;
+      lastFPSTime = ts;
+      fpsEl.textContent = fps + ' FPS';
+    }
   }
+
   rafId = requestAnimationFrame(loop);
 }
 
 function stopCamera() {
-  camActive = false;
+  camActive   = false;
+  sendPending = false;
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
@@ -441,191 +445,11 @@ function stopCamera() {
   btnCam.textContent = '▶ START';
   btnCam.classList.remove('active');
   dotCam.className = 'dot';
-  dotMP.className = 'dot';
+  dotMP.className  = 'dot';
   placeholder.style.display = 'flex';
   placeholderMsg.textContent = 'Kliknij START aby włączyć kamerę';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   fpsEl.textContent = '';
-}
-
-// ── Rendering ──────────────────────────────────────────────────────
-function onResults(results) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  ctx.save();
-  ctx.scale(-1, 1);
-  ctx.translate(-canvas.width, 0);
-
-  if (!results.multiHandLandmarks?.length) {
-    ctx.restore();
-    sendToTD(null);
-    return;
-  }
-
-  const tdData = [];
-
-  results.multiHandLandmarks.forEach((lms, hi) => {
-    const side = results.multiHandedness?.[hi]?.label || 'Hand';
-
-    drawSkeleton(lms, hi);
-    drawLandmarks(lms, hi);
-
-    ctx.font = '600 10px Oxanium, monospace';
-    ctx.fillStyle = hi === 0 ? '#00ffee' : '#ff00aa';
-    ctx.textAlign = 'center';
-    ctx.fillText(side.toUpperCase(), lms[0].x * canvas.width, lms[0].y * canvas.height + 22);
-
-    tdData.push({
-      hand: side,
-      fingers: FINGER_TIPS.map((ti, fi) => ({
-        name: FINGER_NAMES[fi],
-        x: parseFloat((1 - lms[ti].x).toFixed(4)),
-        y: parseFloat(lms[ti].y.toFixed(4)),
-        z: parseFloat(lms[ti].z.toFixed(4))
-      }))
-    });
-  });
-
-  ctx.restore();
-
-  if (tdData.length) {
-    const f = tdData[0].fingers;
-    ticker.textContent = `[${tdData[0].hand}] IDX(${f[1].x},${f[1].y}) MID(${f[2].x},${f[2].y})`;
-  } else {
-    ticker.textContent = 'brak dłoni w kadrze';
-  }
-
-  sendToTD(tdData.length ? tdData : null);
-}
-
-function drawSkeleton(lms, hi) {
-  const pairs = [
-    [0,1],[1,2],[2,3],[3,4],
-    [0,5],[5,6],[6,7],[7,8],
-    [5,9],[9,10],[10,11],[11,12],
-    [9,13],[13,14],[14,15],[15,16],
-    [13,17],[17,18],[18,19],[19,20],
-    [0,17]
-  ];
-  const rgb = hi === 0 ? '0,255,238' : '255,0,170';
-  ctx.strokeStyle = `rgba(${rgb},0.55)`;
-  ctx.lineWidth = 1.5;
-  pairs.forEach(([a,b]) => {
-    ctx.beginPath();
-    ctx.moveTo(lms[a].x * canvas.width, lms[a].y * canvas.height);
-    ctx.lineTo(lms[b].x * canvas.width, lms[b].y * canvas.height);
-    ctx.stroke();
-  });
-}
-
-function drawLandmarks(lms, hi) {
-  lms.forEach((lm, i) => {
-    const x  = lm.x * canvas.width;
-    const y  = lm.y * canvas.height;
-    const fi = FINGER_TIPS.indexOf(i);
-
-    if (fi >= 0) {
-      const col = FINGER_COLORS[fi];
-
-      // Outer soft glow (large)
-      const grad = ctx.createRadialGradient(x, y, 0, x, y, 42);
-      grad.addColorStop(0,   col + 'aa');
-      grad.addColorStop(0.4, col + '44');
-      grad.addColorStop(1,   col + '00');
-      ctx.beginPath();
-      ctx.arc(x, y, 42, 0, Math.PI*2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      // Mid ring
-      ctx.beginPath();
-      ctx.arc(x, y, 22, 0, Math.PI*2);
-      ctx.strokeStyle = col + '88';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Solid core dot
-      ctx.beginPath();
-      ctx.arc(x, y, 12, 0, Math.PI*2);
-      ctx.fillStyle = col;
-      ctx.fill();
-
-      // White center
-      ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI*2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-
-      // Crosshair lines
-      ctx.globalAlpha = 0.7;
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(x-34,y); ctx.lineTo(x+34,y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x,y-34); ctx.lineTo(x,y+34); ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      // Label
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.shadowColor = col;
-      ctx.shadowBlur = 8;
-      ctx.fillText(FINGER_NAMES[fi][0], x, y - 28);
-      ctx.shadowBlur = 0;
-    } else {
-      // Non-tip joints: small dim dot
-      ctx.beginPath();
-      ctx.arc(x, y, 3.5, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(0,255,238,0.35)';
-      ctx.fill();
-    }
-  });
-}
-
-// ── WebSocket / TouchDesigner ──────────────────────────────────────
-function toggleWS() {
-  wsConnected ? disconnectWS() : connectWS();
-}
-
-function connectWS() {
-  const host = document.getElementById('wsHost').value.trim();
-  const port = document.getElementById('wsPort').value.trim();
-  const url  = `ws://${host}:${port}`;
-
-  ws = new WebSocket(url);
-  dotWS.className = 'dot warn pulsing';
-  btnWS.textContent = '⟳ ŁĄCZENIE...';
-
-  ws.onopen  = () => {
-    wsConnected = true;
-    dotWS.className = 'dot ok';
-    btnWS.textContent = '✕ DISCONNECT';
-    btnWS.classList.add('connected');
-    ticker.textContent = `Połączono z TouchDesigner @ ${url}`;
-  };
-  ws.onclose = () => {
-    wsConnected = false;
-    dotWS.className = 'dot';
-    btnWS.textContent = '⬡ CONNECT TD';
-    btnWS.classList.remove('connected');
-  };
-  ws.onerror = () => {
-    ticker.textContent = `❌ Brak połączenia z ${url}`;
-    dotWS.className = 'dot warn';
-  };
-}
-
-function disconnectWS() {
-  if (ws) { ws.close(); ws = null; }
-  wsConnected = false;
-  dotWS.className = 'dot';
-  btnWS.textContent = '⬡ CONNECT TD';
-  btnWS.classList.remove('connected');
-}
-
-function sendToTD(data) {
-  if (!wsConnected || !ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ type:'fingertrack', timestamp:Date.now(), fps, hands: data ?? [] }));
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

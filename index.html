@@ -70,6 +70,18 @@
   <div class="bar" id="bar"></div>
   <div class="score" id="scoreEl" style="display:none">0</div>
   <div class="combo" id="comboEl"></div>
+
+  <!-- HP bar -->
+  <div id="hpWrap" style="display:none">
+    <div id="hpBar"><div id="hpFill"></div></div>
+    <div id="hpLabel">HP</div>
+    <div id="ballCount">100 piłek</div>
+  </div>
+
+  <!-- Zone overlays (visible in game) -->
+  <div class="zone zone-dmg"  id="zoneDmg"></div>
+  <div class="zone zone-neu"  id="zoneNeu"></div>
+  <div class="zone zone-heal" id="zoneHeal"></div>
 </div>
 
 <div class="panel">
@@ -115,11 +127,20 @@ let fCount = 0, fpsVal = 0, fpsT = performance.now();
 
 // ── Game state ────────────────────────────────────────────────────
 let gameOn = false, score = 0, combo = 0, comboTimer = null;
+let hp = 100, maxHp = 100;
+let wristPositions = []; // [{x,y,hand}] updated each frame
 let balls = [], particles = [], spawnTimer = null;
 let fingerPositions = []; // updated each detection frame
-const scoreEl = document.getElementById('scoreEl');
-const comboEl = document.getElementById('comboEl');
-const bGame   = document.getElementById('bGame');
+const scoreEl   = document.getElementById('scoreEl');
+const comboEl   = document.getElementById('comboEl');
+const bGame     = document.getElementById('bGame');
+const hpWrap    = document.getElementById('hpWrap');
+const hpFill    = document.getElementById('hpFill');
+const hpLabel   = document.getElementById('hpLabel');
+const ballCount = document.getElementById('ballCount');
+const zoneDmg   = document.getElementById('zoneDmg');
+const zoneNeu   = document.getElementById('zoneNeu');
+const zoneHeal  = document.getElementById('zoneHeal');
 
 const BALL_COLS = ['#ff6600','#00ffee','#ff00aa','#aaff00','#aa00ff','#ffdd00','#ff4444','#44aaff'];
 
@@ -233,10 +254,35 @@ function explodeBall(ball) {
   for (let i = 0; i < count; i++) {
     particles.push(new Particle(ball.x, ball.y, ball.col));
   }
-  // Flash ring on canvas edge
-  addScore(ball); // bonus for top-wall hit
-  score += 15;    // extra top-wall bonus
+  // Speed+size based scoring: fast+small = high, slow+large = low
+  const speed  = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+  const pts    = Math.max(5, Math.round(speed * 18 + (40 - ball.r) * 1.5));
+  const combo2 = Math.max(1, combo);
+  const total  = pts * combo2;
+  score += total;
+  combo++;
+  if (comboTimer) clearTimeout(comboTimer);
+  comboTimer = setTimeout(() => { combo = 0; comboEl.classList.remove('show'); }, 1500);
   scoreEl.textContent = score;
+  scoreEl.classList.add('pop');
+  setTimeout(() => scoreEl.classList.remove('pop'), 120);
+  comboEl.textContent = `💥 +${total} (v${speed.toFixed(1)} r${ball.r.toFixed(0)}) ×${combo2}`;
+  comboEl.classList.add('show');
+}
+
+function updateHpBar() {
+  const pct = Math.max(0, hp / maxHp * 100);
+  hpFill.style.width = pct + '%';
+  if (pct > 60)      hpFill.style.background = 'linear-gradient(90deg,#00ff88,#aaff00)';
+  else if (pct > 30) hpFill.style.background = 'linear-gradient(90deg,#ff9900,#ffdd00)';
+  else               hpFill.style.background = 'linear-gradient(90deg,#ff2244,#ff6600)';
+  hpLabel.textContent = 'HP ' + Math.ceil(hp) + '/' + maxHp;
+  if (hp <= 0 && gameOn) gameOver();
+}
+
+function gameOver() {
+  stopGame();
+  tick.textContent = '💀 GAME OVER! Wynik: ' + score + ' pkt';
 }
 
 function toggleGame() {
@@ -245,11 +291,13 @@ function toggleGame() {
 }
 
 function startGame() {
-  gameOn = true; score = 0; combo = 0; balls = []; particles = [];
+  gameOn = true; score = 0; combo = 0; balls = []; particles = []; hp = 100; updateHpBar();
   bGame.textContent = '⏹ STOP GRY';
   bGame.classList.add('on');
   scoreEl.style.display = 'block';
+  hpWrap.style.display = 'flex';
   scoreEl.textContent = '0';
+  [zoneDmg,zoneNeu,zoneHeal].forEach(z=>z.classList.add('active'));
   spawnTimer = setInterval(spawnBall, 2000);
   spawnBall(); // immediate first ball
 }
@@ -261,6 +309,8 @@ function stopGame() {
   bGame.textContent = '🎮 GRA';
   bGame.classList.remove('on');
   scoreEl.style.display = 'none';
+  hpWrap.style.display = 'none';
+  [zoneDmg,zoneNeu,zoneHeal].forEach(z=>z.classList.remove('active'));
   comboEl.classList.remove('show');
 }
 
@@ -313,9 +363,40 @@ function updateGame() {
   particles = particles.filter(p => !p.dead());
 
   // Ball count in ticker
-  if (gameOn) {
-    tick.textContent = `🎮 ${score}pkt | ${balls.length}/100 piłek | combo×${combo}`;
+  if (!gameOn) return;
+
+  // Ball counter
+  const remaining = 100 - balls.length;
+  ballCount.textContent = `${balls.length}/100 piłek | ${remaining} wolnych`;
+
+  // Zone-based HP
+  const h = cvs.height;
+  const dmgZone  = y => y < h * 0.5;
+  const healZone = y => y >= h * 0.75;
+
+  let anyDmg  = false;
+  let healAll = wristPositions.length >= 2 && wristPositions.every(w => healZone(w.y));
+
+  wristPositions.forEach(w => {
+    if (dmgZone(w.y))  anyDmg = true;
+  });
+
+  if (anyDmg) {
+    hp = Math.max(0, hp - 0.3); // ~6HP/s at 20fps
+    updateHpBar();
+  } else if (healAll) {
+    hp = Math.min(maxHp, hp + 0.15); // ~3HP/s
+    updateHpBar();
   }
+
+  // Highlight heal zone when both hands there
+  zoneHeal.style.borderColor = healAll
+    ? 'rgba(0,255,136,.8)' : 'rgba(0,255,136,.3)';
+  zoneHeal.style.background  = healAll
+    ? 'linear-gradient(0deg,rgba(0,255,136,.3) 0%,transparent 100%)'
+    : 'linear-gradient(0deg,rgba(0,255,136,.15) 0%,transparent 100%)';
+
+  tick.textContent = `🎮 ${score}pkt | HP:${Math.ceil(hp)} | ×${combo}`;
 }
 
 function addScore(ball) {
@@ -505,6 +586,7 @@ function draw(hands) {
   ctx.clearRect(0, 0, cvs.width, cvs.height);
   drawGame(ctx); // balls behind everything
   fingerPositions = []; // reset each frame
+  wristPositions  = []; // reset each frame
   if (!hands.length) return;
 
   // Scale from video coords to canvas coords
@@ -595,13 +677,27 @@ function draw(hands) {
       ctx.shadowBlur = 0;
     });
 
-    // Hand label
+    // Hand label (Left<->Right swapped to match mirror)
     const w = kp[0];
     if (w) {
+      const wx = cvs.width - w.x*sw;
+      const wy = w.y*sh;
+      const displayHand = hand.handedness === 'Left' ? 'RIGHT' : 'LEFT';
       ctx.font = '600 11px Oxanium,monospace';
       ctx.fillStyle = `rgba(${rgb},1)`;
       ctx.textAlign = 'center';
-      ctx.fillText(hand.handedness.toUpperCase(), cvs.width - w.x*sw, w.y*sh + 24);
+      ctx.fillText(displayHand, wx, wy + 24);
+      if (gameOn) {
+        wristPositions.push({x: wx, y: wy, hand: displayHand});
+        const zh = cvs.height;
+        let zLabel, zCol;
+        if (wy < zh * 0.5)        { zLabel = 'DMG';   zCol = '#ff4444'; }
+        else if (wy >= zh * 0.75) { zLabel = '+HEAL'; zCol = '#00ff88'; }
+        else                       { zLabel = 'NEU';   zCol = '#888888'; }
+        ctx.font = 'bold 9px monospace';
+        ctx.fillStyle = zCol;
+        ctx.fillText(zLabel, wx, wy + 37);
+      }
     }
   });
 }
